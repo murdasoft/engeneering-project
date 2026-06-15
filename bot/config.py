@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # --- Telegram ---
     telegram_bot_token: str = Field(..., description="Telegram Bot API token")
-    telegram_webhook_secret: str = Field(..., description="Secret for webhook verification")
+    telegram_webhook_secret: str = Field("", description="Secret for webhook verification")
     webhook_base_url: str = Field("http://localhost:8000", description="Public URL for webhooks")
 
     # --- AI / LLM ---

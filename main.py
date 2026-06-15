@@ -64,9 +64,10 @@ async def telegram_webhook(
     Process incoming Telegram updates.
     Validates secret token for security.
     """
-    # Verify webhook secret
-    if x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
-        raise HTTPException(status_code=403, detail="Invalid secret token")
+    # Verify webhook secret (skip if secret not configured or not sent)
+    if settings.telegram_webhook_secret and x_telegram_bot_api_secret_token:
+        if x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
+            raise HTTPException(status_code=403, detail="Invalid secret token")
 
     try:
         body = await request.json()
