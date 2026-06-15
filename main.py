@@ -10,9 +10,9 @@ import logging
 from fastapi import FastAPI, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
 
-from app.bot.config import settings
-from app.bot.handlers import handle_message, handle_start
-from app.bot.telegram_client import register_webhook, send_chat_action
+from bot.config import settings
+from bot.handlers import handle_message, handle_start
+from bot.telegram_client import register_webhook, send_chat_action, send_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -93,16 +93,14 @@ async def telegram_webhook(
         await send_chat_action(chat_id, "typing")
         # TODO: Download audio → STT ensemble → route as text
         # For now, send a placeholder response
-        from app.bot.sessions import get_session
-        from app.bot.models import Lang
+        from bot.sessions import get_session
+        from bot.models import Lang
         session = get_session(chat_id)
         lang = session.lang or Lang.RU
         if lang == Lang.RU:
-            from app.bot.telegram_client import send_message as sm
-            await sm(chat_id, "Я получил голосовое сообщение. Распознавание голоса скоро будет подключено.")
+            await send_message(chat_id, "Я получил голосовое сообщение. Распознавание голоса скоро будет подключено.")
         else:
-            from app.bot.telegram_client import send_message as sm
-            await sm(chat_id, "Мен дауыстық хабарлама алдым. Дауысты тану жақында қосылады.")
+            await send_message(chat_id, "Мен дауыстық хабарлама алдым. Дауысты тану жақында қосылады.")
         return JSONResponse({"ok": True})
 
     # Handle text messages

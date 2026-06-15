@@ -4,7 +4,7 @@ Session store: in-memory dict with interface ready for Supabase swap.
 
 from __future__ import annotations
 
-from app.bot.models import Session
+from bot.models import Session
 
 # In-memory session storage (will be replaced with Supabase in production)
 _sessions: dict[int, Session] = {}

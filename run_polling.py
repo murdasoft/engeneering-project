@@ -8,12 +8,12 @@ import logging
 import sys
 from pathlib import Path
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Add app dir to path so `bot.*` imports work
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from app.bot.config import settings
-from app.bot.handlers import handle_message, handle_start
-from app.bot.telegram_client import send_chat_action
+from bot.config import settings
+from bot.handlers import handle_message, handle_start
+from bot.telegram_client import send_chat_action, send_message
 
 import httpx
 
@@ -63,9 +63,8 @@ async def process_update(update: dict):
 
     if voice:
         await send_chat_action(chat_id, "typing")
-        from app.bot.sessions import get_session
-        from app.bot.models import Lang
-        from app.bot.telegram_client import send_message
+        from bot.sessions import get_session
+        from bot.models import Lang
         session = get_session(chat_id)
         lang = session.lang or Lang.RU
         if lang == Lang.RU:

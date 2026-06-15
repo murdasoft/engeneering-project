@@ -3,7 +3,7 @@ Static content / text templates for the bot — bilingual (ru/kk).
 Menu items, messages, prompts.
 """
 
-from app.bot.models import Lang, City
+from bot.models import Lang, City
 
 # --- Greeting ---
 

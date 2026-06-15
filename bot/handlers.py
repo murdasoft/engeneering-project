@@ -8,9 +8,9 @@ from __future__ import annotations
 import logging
 import time
 
-from app.bot.models import BotState, City, Lang, Session
-from app.bot.sessions import get_session, save_session, reset_session
-from app.bot.content import (
+from bot.models import BotState, City, Lang, Session
+from bot.sessions import get_session, save_session, reset_session
+from bot.content import (
     GREETING,
     CITY_SELECT,
     MAIN_MENU,
@@ -19,8 +19,8 @@ from app.bot.content import (
     HANDOFF_RETURN_MSG,
     UNKNOWN_INPUT,
 )
-from app.bot.lang_detect import detect_language
-from app.bot.telegram_client import send_message, send_chat_action
+from bot.lang_detect import detect_language
+from bot.telegram_client import send_message, send_chat_action
 
 logger = logging.getLogger(__name__)
 

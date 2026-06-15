@@ -3,7 +3,7 @@ Language detection from user text input.
 Simple marker-based approach per BOT_OPERATIONS_GUIDEBOOK section 7.
 """
 
-from app.bot.models import Lang
+from bot.models import Lang
 
 # Kazakh-specific characters (not present in Russian)
 _KK_MARKERS = set("әіңғүұқөһ")  # unique Kazakh letters (lowercase)
