@@ -89,19 +89,31 @@ async def telegram_webhook(
         await handle_start(chat_id)
         return JSONResponse({"ok": True})
 
-    # Handle voice messages (STT placeholder)
+    # Handle voice messages → STT → same text router (ТЗ 3.9)
     if voice:
         await send_chat_action(chat_id, "typing")
-        # TODO: Download audio → STT ensemble → route as text
-        # For now, send a placeholder response
+        from bot.telegram_client import get_file_url
+        from bot.stt import transcribe_voice
+
+        file_id = voice.get("file_id")
+        if file_id:
+            audio_url = await get_file_url(file_id)
+            if audio_url:
+                transcribed = await transcribe_voice(audio_url)
+                if transcribed:
+                    # Route transcribed text through normal handler (don't show raw transcript)
+                    await handle_message(chat_id, transcribed)
+                    return JSONResponse({"ok": True})
+
+        # Fallback if STT failed
         from bot.sessions import get_session
         from bot.models import Lang
         session = get_session(chat_id)
         lang = session.lang or Lang.RU
         if lang == Lang.RU:
-            await send_message(chat_id, "Я получил голосовое сообщение. Распознавание голоса скоро будет подключено.")
+            await send_message(chat_id, "Не удалось распознать голосовое сообщение. Попробуйте написать текстом.")
         else:
-            await send_message(chat_id, "Мен дауыстық хабарлама алдым. Дауысты тану жақында қосылады.")
+            await send_message(chat_id, "Дауыстық хабарламаны тану мүмкін болмады. Мәтін жазып көріңіз.")
         return JSONResponse({"ok": True})
 
     # Handle text messages
