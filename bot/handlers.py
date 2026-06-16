@@ -202,7 +202,6 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
 
     # Digit menu
     if text in ("1", "2", "3", "4", "5"):
-        # Product info (stub — will be expanded with KB)
         product_names = {
             "1": "HPL-панели GREENLAM" if lang == Lang.RU else "HPL-панельдер GREENLAM",
             "2": "Фиброцементные панели KMEW" if lang == Lang.RU else "KMEW фиброцемент панельдері",
@@ -214,21 +213,38 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
         session.product = product
         save_session(chat_id, session)
 
-        if lang == Lang.RU:
-            msg = (
-                f"Вы выбрали: {product}\n\n"
-                f"Я могу рассказать подробнее о характеристиках, показать доступные цвета "
-                f"или записать вас на консультацию.\n\n"
-                f"Что вас интересует? Или напишите «0» чтобы вернуться в меню."
-            )
+        # Ask AI for a brief product overview
+        await send_chat_action(chat_id, "typing")
+        prompt = f"Расскажи кратко о {product}" if lang == Lang.RU else f"{product} туралы қысқаша айтып бер"
+        ai_reply = await ai_respond(
+            user_message=prompt,
+            lang=lang,
+            city=session.city,
+            conversation_history=session.conversation_history,
+        )
+
+        if ai_reply:
+            footer_ru = "\n\nЗадайте вопрос о продукте, «6» для записи на консультацию или «0» для возврата в меню."
+            footer_kk = "\n\nӨнім туралы сұрақ қойыңыз, кеңесшіге жазылу үшін «6» немесе мәзірге оралу үшін «0» жазыңыз."
+            footer = footer_ru if lang == Lang.RU else footer_kk
+            session.conversation_history.append({"role": "assistant", "content": ai_reply})
+            if len(session.conversation_history) > 10:
+                session.conversation_history = session.conversation_history[-10:]
+            save_session(chat_id, session)
+            await send_message(chat_id, ai_reply + footer)
         else:
-            msg = (
-                f"Сіз таңдадыңыз: {product}\n\n"
-                f"Мен сипаттамалары туралы толығырақ айтып, қолжетімді түстерді "
-                f"көрсете аламын немесе сізді кеңесшіге жаза аламын.\n\n"
-                f"Сізді не қызықтырады? Немесе мәзірге оралу үшін «0» жазыңыз."
-            )
-        await send_message(chat_id, msg)
+            if lang == Lang.RU:
+                await send_message(
+                    chat_id,
+                    f"Вы выбрали: {product}\n\n"
+                    "Задайте вопрос или напишите «0» для возврата в меню.",
+                )
+            else:
+                await send_message(
+                    chat_id,
+                    f"Сіз таңдадыңыз: {product}\n\n"
+                    "Сұрақ қойыңыз немесе мәзірге оралу үшін «0» жазыңыз.",
+                )
         return
 
     if text == "6":
@@ -486,5 +502,20 @@ async def _trigger_handoff(chat_id: int, session: Session) -> None:
     save_session(chat_id, session)
     await send_message(chat_id, HANDOFF_MSG[lang])
 
+    # Warn if off-hours
+    if _is_off_hours():
+        if lang == Lang.RU:
+            await send_message(
+                chat_id,
+                "⏰ Сейчас нерабочее время. Менеджер ответит в рабочие часы (пн–пт, 09:00–18:00).\n"
+                "Ваше сообщение сохранено.",
+            )
+        else:
+            await send_message(
+                chat_id,
+                "⏰ Қазір жұмыс уақытынан тыс. Менеджер жұмыс уақытында жауап береді (дс–жм, 09:00–18:00).\n"
+                "Сіздің хабарламаңыз сақталды.",
+            )
+
     # TODO: Send notification to ops alert chat / manager WhatsApp
-    logger.info("Handoff triggered: chat_id=%s", chat_id)
+    logger.info("Handoff triggered: chat_id=%s off_hours=%s", chat_id, _is_off_hours())
