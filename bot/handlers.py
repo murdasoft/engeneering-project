@@ -21,6 +21,7 @@ from bot.content import (
 )
 from bot.lang_detect import detect_language
 from bot.telegram_client import send_message, send_chat_action
+from bot.ai_agent import ai_respond, detect_intent
 
 logger = logging.getLogger(__name__)
 
@@ -246,27 +247,43 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
         await _trigger_handoff(chat_id, session)
         return
 
-    # Check for handoff keywords
-    lower = text.lower()
-    if any(kw in lower for kw in ("менеджер", "оператор", "operator", "manager")):
+    # Quick intent detection (rule-based, before LLM)
+    intent = detect_intent(text)
+    if intent == "6":
+        session.state = BotState.IN_FLOW
+        session.flow_step = "ask_name"
+        save_session(chat_id, session)
+        if lang == Lang.RU:
+            await send_message(chat_id, "Отлично! Давайте запишем вас на консультацию.\nКак вас зовут?")
+        else:
+            await send_message(chat_id, "Тамаша! Сізді кеңесшіге жазайық.\nСіздің атыңыз?")
+        return
+
+    if intent == "8":
         await _trigger_handoff(chat_id, session)
         return
 
-    # Free text → FAQ/AI (stub for now — will route to LLM agent)
-    if lang == Lang.RU:
-        await send_message(
-            chat_id,
-            "Спасибо за вопрос! Сейчас я работаю в режиме меню. "
-            "Скоро смогу отвечать на свободные вопросы с помощью ИИ.\n\n"
-            "Пока выберите пункт из меню или напишите «8» для связи с менеджером.",
-        )
+    # Free text → AI agent
+    # Save user message to history
+    session.conversation_history.append({"role": "user", "content": text})
+    save_session(chat_id, session)
+
+    ai_reply = await ai_respond(
+        user_message=text,
+        lang=lang,
+        city=session.city,
+        conversation_history=session.conversation_history,
+    )
+
+    if ai_reply:
+        session.conversation_history.append({"role": "assistant", "content": ai_reply})
+        # Keep history manageable (last 10 messages)
+        if len(session.conversation_history) > 10:
+            session.conversation_history = session.conversation_history[-10:]
+        save_session(chat_id, session)
+        await send_message(chat_id, ai_reply)
     else:
-        await send_message(
-            chat_id,
-            "Сұрағыңыз үшін рахмет! Қазір мен мәзір режимінде жұмыс істеймін. "
-            "Жақында ЖИ көмегімен еркін сұрақтарға жауап бере аламын.\n\n"
-            "Әзірге мәзірден тармақ таңдаңыз немесе менеджермен байланысу үшін «8» жазыңыз.",
-        )
+        await send_message(chat_id, UNKNOWN_INPUT[lang])
 
 
 async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
