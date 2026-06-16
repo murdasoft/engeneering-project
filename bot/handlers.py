@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import datetime, timezone, timedelta
 
 from bot.models import BotState, City, Lang, Session
 from bot.sessions import get_session, save_session, reset_session
@@ -27,6 +28,21 @@ logger = logging.getLogger(__name__)
 
 # Default language for initial greeting (bilingual)
 _DEFAULT_LANG = Lang.RU
+
+# Kazakhstan timezone (UTC+5)
+_KZ_TZ = timezone(timedelta(hours=5))
+
+
+def _is_off_hours() -> bool:
+    """Check if current time is outside working hours (Mon-Fri 09:00-18:00 KZ time)."""
+    now = datetime.now(_KZ_TZ)
+    # Weekend
+    if now.weekday() >= 5:
+        return True
+    # Before 9:00 or after 18:00
+    if now.hour < 9 or now.hour >= 18:
+        return True
+    return False
 
 
 async def handle_message(chat_id: int, text: str) -> None:
@@ -302,32 +318,94 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
 
     if session.flow_step == "ask_phone":
         session.data["phone"] = text
-        session.flow_step = "ask_purpose"
+        session.flow_step = "ask_object_type"
         save_session(chat_id, session)
         if lang == Lang.RU:
             await send_message(
                 chat_id,
-                "Что вас интересует?\n"
+                "Какой у вас тип объекта?\n"
+                "1 — Многоэтажный дом\n"
+                "2 — Частный дом\n"
+                "3 — Коммерческое здание\n"
+                "4 — Административное здание\n"
+                "5 — Другое",
+            )
+        else:
+            await send_message(
+                chat_id,
+                "Объект түрі қандай?\n"
+                "1 — Көп қабатты үй\n"
+                "2 — Жеке үй\n"
+                "3 — Коммерциялық ғимарат\n"
+                "4 — Әкімшілік ғимарат\n"
+                "5 — Басқа",
+            )
+        return
+
+    if session.flow_step == "ask_object_type":
+        _obj_types_ru = {
+            "1": "Многоэтажный дом", "2": "Частный дом",
+            "3": "Коммерческое здание", "4": "Административное здание", "5": "Другое",
+        }
+        _obj_types_kk = {
+            "1": "Көп қабатты үй", "2": "Жеке үй",
+            "3": "Коммерциялық ғимарат", "4": "Әкімшілік ғимарат", "5": "Басқа",
+        }
+        obj_map = _obj_types_ru if lang == Lang.RU else _obj_types_kk
+        session.data["object_type"] = obj_map.get(text, text)
+        session.flow_step = "ask_material_purpose"
+        save_session(chat_id, session)
+        if lang == Lang.RU:
+            await send_message(
+                chat_id,
+                "Назначение материала?\n"
+                "1 — Фасад\n"
+                "2 — Интерьер\n"
+                "3 — Кровля\n"
+                "4 — Не определился",
+            )
+        else:
+            await send_message(
+                chat_id,
+                "Материалдың мақсаты?\n"
+                "1 — Қасбет (фасад)\n"
+                "2 — Интерьер\n"
+                "3 — Шатыр (кровля)\n"
+                "4 — Анықталмаған",
+            )
+        return
+
+    if session.flow_step == "ask_material_purpose":
+        _mat_ru = {"1": "Фасад", "2": "Интерьер", "3": "Кровля", "4": "Не определился"}
+        _mat_kk = {"1": "Қасбет", "2": "Интерьер", "3": "Шатыр", "4": "Анықталмаған"}
+        mat_map = _mat_ru if lang == Lang.RU else _mat_kk
+        session.data["material_purpose"] = mat_map.get(text, text)
+        session.flow_step = "ask_visit_type"
+        save_session(chat_id, session)
+        if lang == Lang.RU:
+            await send_message(
+                chat_id,
+                "Как удобнее?\n"
                 "1 — Консультация в офисе\n"
                 "2 — Встреча на объекте",
             )
         else:
             await send_message(
                 chat_id,
-                "Сізді не қызықтырады?\n"
+                "Қалай ыңғайлы?\n"
                 "1 — Кеңседе кеңес алу\n"
                 "2 — Объектіде кездесу",
             )
         return
 
-    if session.flow_step == "ask_purpose":
+    if session.flow_step == "ask_visit_type":
         if text == "1":
             purpose = "Консультация в офисе" if lang == Lang.RU else "Кеңседе кеңес"
         elif text == "2":
             purpose = "Встреча на объекте" if lang == Lang.RU else "Объектіде кездесу"
         else:
             purpose = text
-        session.data["purpose"] = purpose
+        session.data["visit_type"] = purpose
         session.flow_step = "ask_comment"
         save_session(chat_id, session)
         if lang == Lang.RU:
@@ -345,32 +423,49 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
 
         # Build summary
         city_name = "Астана" if session.city == City.ASTANA else "Алматы"
-        summary_data = session.data
+        d = session.data
+
+        # Check working hours (Almaty/Astana = UTC+5, Mon-Fri 09:00-18:00)
+        is_off_hours = _is_off_hours()
+        off_hours_note_ru = "\n\n⏰ Заявка оставлена в нерабочее время. Менеджер свяжется в рабочие часы (пн–пт, 09:00–18:00)."
+        off_hours_note_kk = "\n\n⏰ Өтінім жұмыс уақытынан тыс қалдырылды. Менеджер жұмыс уақытында хабарласады (дс–жм, 09:00–18:00)."
 
         if lang == Lang.RU:
             summary = (
                 "✅ Заявка принята!\n\n"
-                f"Имя: {summary_data.get('name', '—')}\n"
-                f"Телефон: {summary_data.get('phone', '—')}\n"
-                f"Город: {city_name}\n"
-                f"Цель: {summary_data.get('purpose', '—')}\n"
-                f"Комментарий: {summary_data.get('comment') or '—'}\n\n"
+                f"👤 Имя: {d.get('name', '—')}\n"
+                f"📞 Телефон: {d.get('phone', '—')}\n"
+                f"📍 Город: {city_name}\n"
+                f"🏢 Тип объекта: {d.get('object_type', '—')}\n"
+                f"🎯 Назначение: {d.get('material_purpose', '—')}\n"
+                f"📋 Формат: {d.get('visit_type', '—')}\n"
+                f"💬 Комментарий: {d.get('comment') or '—'}\n\n"
                 "Менеджер свяжется с вами в ближайшее время."
             )
+            if is_off_hours:
+                summary += off_hours_note_ru
         else:
             summary = (
                 "✅ Өтінім қабылданды!\n\n"
-                f"Аты: {summary_data.get('name', '—')}\n"
-                f"Телефон: {summary_data.get('phone', '—')}\n"
-                f"Қала: {city_name}\n"
-                f"Мақсат: {summary_data.get('purpose', '—')}\n"
-                f"Пікір: {summary_data.get('comment') or '—'}\n\n"
+                f"👤 Аты: {d.get('name', '—')}\n"
+                f"📞 Телефон: {d.get('phone', '—')}\n"
+                f"📍 Қала: {city_name}\n"
+                f"🏢 Объект түрі: {d.get('object_type', '—')}\n"
+                f"🎯 Мақсаты: {d.get('material_purpose', '—')}\n"
+                f"📋 Формат: {d.get('visit_type', '—')}\n"
+                f"💬 Пікір: {d.get('comment') or '—'}\n\n"
                 "Менеджер сізге жақын арада хабарласады."
             )
+            if is_off_hours:
+                summary += off_hours_note_kk
+
         await send_message(chat_id, summary)
 
         # TODO: Send to Bitrix24 + alert manager via WhatsApp/Telegram ops chat
-        logger.info("Lead created: chat_id=%s data=%s", chat_id, summary_data)
+        logger.info(
+            "Lead created: chat_id=%s city=%s off_hours=%s data=%s",
+            chat_id, city_name, is_off_hours, d,
+        )
 
         # Show menu again
         await send_message(chat_id, MAIN_MENU[lang])
