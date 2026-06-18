@@ -1,5 +1,5 @@
 """
-Speech-to-Text: Together Whisper API.
+Speech-to-Text: Groq Whisper API (whisper-large-v3-turbo).
 Converts voice messages to text for the same text router.
 Per ТЗ section 3.9: do NOT show raw transcript to user.
 """
@@ -16,16 +16,18 @@ from bot.config import settings
 
 logger = logging.getLogger(__name__)
 
-_TOGETHER_STT_URL = "https://api.together.xyz/v1/audio/transcriptions"
+_GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+_STT_MODEL = "whisper-large-v3-turbo"
 
 
 async def transcribe_voice(audio_url: str) -> str | None:
     """
-    Download audio from Telegram and transcribe via Together Whisper API.
+    Download audio from Telegram and transcribe via Groq Whisper API.
     Returns transcribed text or None on failure.
     """
-    if not settings.together_api_key:
-        logger.warning("Together API key not set — cannot transcribe voice")
+    api_key = settings.groq_api_key
+    if not api_key:
+        logger.warning("Groq API key not set — cannot transcribe voice")
         return None
 
     try:
@@ -37,29 +39,27 @@ async def transcribe_voice(audio_url: str) -> str | None:
                 return None
             audio_bytes = audio_resp.content
 
-        # Save to temp file (Together API needs a file upload)
+        # Save to temp file
         with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
             tmp.write(audio_bytes)
             tmp_path = Path(tmp.name)
 
         try:
-            # Send to Together Whisper API
             async with httpx.AsyncClient(timeout=60) as client:
                 with open(tmp_path, "rb") as f:
                     resp = await client.post(
-                        _TOGETHER_STT_URL,
-                        headers={
-                            "Authorization": f"Bearer {settings.together_api_key}",
-                        },
+                        _GROQ_STT_URL,
+                        headers={"Authorization": f"Bearer {api_key}"},
                         files={"file": ("voice.ogg", f, "audio/ogg")},
                         data={
-                            "model": "whisper-large-v3",
+                            "model": _STT_MODEL,
                             "language": "ru",
+                            "response_format": "json",
                         },
                     )
 
                 if resp.status_code != 200:
-                    logger.error("Together STT error: %s %s", resp.status_code, resp.text)
+                    logger.error("Groq STT error: %s %s", resp.status_code, resp.text)
                     return None
 
                 data = resp.json()
@@ -68,7 +68,6 @@ async def transcribe_voice(audio_url: str) -> str | None:
                 return text if text else None
 
         finally:
-            # Clean up temp file
             tmp_path.unlink(missing_ok=True)
 
     except Exception as e:
