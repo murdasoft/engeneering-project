@@ -3,7 +3,19 @@ Static content / text templates for the bot — bilingual (ru/kk).
 Menu items, messages, prompts.
 """
 
+from pathlib import Path
+
 from bot.models import Lang, City
+
+# Project root (two levels up from app/bot/content.py)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+# PDF presentation files (local paths for polling; file_id for webhook in env)
+PDF_FILES = {
+    "greenlam": str(_PROJECT_ROOT / "Greenlam presentation.pdf"),
+    "kmew": str(_PROJECT_ROOT / "Презнтация KMEW.pdf"),
+    "3mm": str(_PROJECT_ROOT / "3MM agregator.pdf"),
+}
 
 # --- Greeting ---
 
@@ -46,26 +58,24 @@ CITY_SELECT = {
 MAIN_MENU = {
     Lang.RU: (
         "Чем могу помочь? Выберите номер или напишите вопрос:\n\n"
-        "1 — HPL-панели GREENLAM\n"
-        "2 — Фиброцементные панели KMEW\n"
-        "3 — Композитная черепица (кровля)\n"
-        "4 — Интерьерные материалы\n"
-        "5 — Услуги под ключ / монтаж\n"
+        "1 — HPL-панели для фасада GREENLAM\n"
+        "2 — HPL-панели для интерьера GREENLAM\n"
+        "3 — Фиброцементные панели KMEW\n"
+        "4 — Широкоформатный керамогранит 3MM\n"
+        "5 — Связаться с менеджером\n\n"
         "6 — Запись на консультацию\n"
-        "7 — Частые вопросы\n"
-        "8 — Связаться с менеджером\n\n"
+        "7 — Частые вопросы\n\n"
         "0 — Назад | 98 — Сменить город | 99 — Сменить язык"
     ),
     Lang.KK: (
         "Сізге қалай көмектесе аламын? Нөмірді таңдаңыз немесе сұрағыңызды жазыңыз:\n\n"
-        "1 — HPL-панельдер GREENLAM\n"
-        "2 — KMEW фиброцемент панельдері\n"
-        "3 — Композитті жабынтақ (шатыр)\n"
-        "4 — Интерьер материалдары\n"
-        "5 — Кешенді қызметтер / монтаж\n"
+        "1 — GREENLAM HPL-фасад панельдері\n"
+        "2 — GREENLAM HPL-интерьер панельдері\n"
+        "3 — KMEW фиброцемент панельдері\n"
+        "4 — 3MM кең пішімді керамогранит\n"
+        "5 — Менеджермен байланысу\n\n"
         "6 — Кеңесшіге жазылу\n"
-        "7 — Жиі қойылатын сұрақтар\n"
-        "8 — Менеджермен байланысу\n\n"
+        "7 — Жиі қойылатын сұрақтар\n\n"
         "0 — Артқа | 98 — Қаланы ауыстыру | 99 — Тілді ауыстыру"
     ),
 }
@@ -93,6 +103,23 @@ HANDOFF_MSG = {
 HANDOFF_RETURN_MSG = {
     Lang.RU: "Вы снова общаетесь с ботом. Чем могу помочь?",
     Lang.KK: "Сіз қайтадан ботпен сөйлесіп жатырсыз. Қалай көмектесе аламын?",
+}
+
+# --- Presentation offer ---
+
+PRESENTATION_OFFER = {
+    Lang.RU: "\n\nХотите получить презентацию в PDF? Напишите «да» или «презентация».",
+    Lang.KK: "\n\nPDF-презентацияны алғыңыз келе ме? «Иә» немесе «презентация» деп жазыңыз.",
+}
+
+PRESENTATION_SENT = {
+    Lang.RU: "Отправляю презентацию 📎",
+    Lang.KK: "Презентацияны жіберемін 📎",
+}
+
+PRESENTATION_NOT_FOUND = {
+    Lang.RU: "К сожалению, презентация временно недоступна. Свяжитесь с менеджером — напишите «8».",
+    Lang.KK: "Өкінішке орай, презентация уақытша қолжетімсіз. Менеджермен байланысыңыз — «8» деп жазыңыз.",
 }
 
 # --- Misc ---

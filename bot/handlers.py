@@ -19,10 +19,16 @@ from bot.content import (
     HANDOFF_MSG,
     HANDOFF_RETURN_MSG,
     UNKNOWN_INPUT,
+    PDF_FILES,
+    PRESENTATION_OFFER,
+    PRESENTATION_SENT,
+    PRESENTATION_NOT_FOUND,
 )
 from bot.lang_detect import detect_language
-from bot.telegram_client import send_message, send_chat_action
-from bot.ai_agent import ai_respond, detect_intent
+from bot.telegram_client import send_message, send_chat_action, send_document
+from bot.ai_agent import ai_respond, detect_intent, detect_product_intent
+from bot.crm import create_lead
+from bot.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +37,32 @@ _DEFAULT_LANG = Lang.RU
 
 # Kazakhstan timezone (UTC+5)
 _KZ_TZ = timezone(timedelta(hours=5))
+
+# Product key mapping (digit / keyword → PDF key)
+_PRODUCT_PDF_MAP = {
+    "1": "greenlam",  # HPL фасад
+    "2": "greenlam",  # HPL интерьер
+    "3": "kmew",      # KMEW
+    "4": "3mm",       # керамогранит
+    "5": None,        # связаться с менеджером — нет PDF
+}
+
+
+def _resolve_pdf_path(product_key: str) -> str | None:
+    """
+    Return file path or file_id for a product.
+    Priority: env file_id > local file path.
+    """
+    env_map = {
+        "greenlam": getattr(settings, "pdf_greenlam_file_id", ""),
+        "kmew": getattr(settings, "pdf_kmew_file_id", ""),
+        "3mm": getattr(settings, "pdf_3mm_file_id", ""),
+    }
+    file_id = env_map.get(product_key, "")
+    if file_id:
+        return file_id
+    path = PDF_FILES.get(product_key)
+    return path
 
 
 def _is_off_hours() -> bool:
@@ -196,55 +228,69 @@ async def _handle_city_selection(chat_id: int, text: str, session: Session) -> N
     await send_message(chat_id, f"{office}\n\n{MAIN_MENU[lang]}")
 
 
+async def _show_product(chat_id: int, digit: str, session: Session) -> None:
+    """Show product info for a given menu digit (reused by menu & intent)."""
+    lang = session.lang or _DEFAULT_LANG
+    product_names = {
+        "1": "HPL-панели для фасада GREENLAM" if lang == Lang.RU else "GREENLAM HPL-фасад панельдері",
+        "2": "HPL-панели для интерьера GREENLAM" if lang == Lang.RU else "GREENLAM HPL-интерьер панельдері",
+        "3": "Фиброцементные панели KMEW" if lang == Lang.RU else "KMEW фиброцемент панельдері",
+        "4": "Широкоформатный керамогранит 3MM" if lang == Lang.RU else "3MM кең пішімді керамогранит",
+    }
+    product = product_names[digit]
+    session.product = product
+    save_session(chat_id, session)
+
+    # Ask AI for a brief product overview
+    await send_chat_action(chat_id, "typing")
+    prompt = f"Расскажи кратко о {product}" if lang == Lang.RU else f"{product} туралы қысқаша айтып бер"
+    ai_reply = await ai_respond(
+        user_message=prompt,
+        lang=lang,
+        city=session.city,
+        conversation_history=session.conversation_history,
+    )
+
+    if ai_reply:
+        footer_ru = "\n\nЗадайте вопрос о продукте, «6» для записи на консультацию или «0» для возврата в меню."
+        footer_kk = "\n\nӨнім туралы сұрақ қойыңыз, кеңесшіге жазылу үшін «6» немесе мәзірге оралу үшін «0» жазыңыз."
+        footer = footer_ru if lang == Lang.RU else footer_kk
+        # Offer PDF presentation if available for this product
+        pdf_key = _PRODUCT_PDF_MAP.get(digit)
+        if pdf_key and _resolve_pdf_path(pdf_key):
+            footer += PRESENTATION_OFFER[lang]
+        session.conversation_history.append({"role": "assistant", "content": ai_reply})
+        if len(session.conversation_history) > 10:
+            session.conversation_history = session.conversation_history[-10:]
+        save_session(chat_id, session)
+        await send_message(chat_id, ai_reply + footer)
+    else:
+        if lang == Lang.RU:
+            await send_message(
+                chat_id,
+                f"Вы выбрали: {product}\n\n"
+                "Задайте вопрос или напишите «0» для возврата в меню.",
+            )
+        else:
+            await send_message(
+                chat_id,
+                f"Сіз таңдадыңыз: {product}\n\n"
+                "Сұрақ қойыңыз немесе мәзірге оралу үшін «0» жазыңыз.",
+            )
+
+
 async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
     """Route menu selection or free-text question."""
     lang = session.lang or _DEFAULT_LANG
 
     # Digit menu
-    if text in ("1", "2", "3", "4", "5"):
-        product_names = {
-            "1": "HPL-панели GREENLAM" if lang == Lang.RU else "HPL-панельдер GREENLAM",
-            "2": "Фиброцементные панели KMEW" if lang == Lang.RU else "KMEW фиброцемент панельдері",
-            "3": "Композитная черепица" if lang == Lang.RU else "Композитті жабынтақ",
-            "4": "Интерьерные материалы" if lang == Lang.RU else "Интерьер материалдары",
-            "5": "Услуги под ключ / монтаж" if lang == Lang.RU else "Кешенді қызметтер / монтаж",
-        }
-        product = product_names[text]
-        session.product = product
-        save_session(chat_id, session)
+    if text in ("1", "2", "3", "4"):
+        await _show_product(chat_id, text, session)
+        return
 
-        # Ask AI for a brief product overview
-        await send_chat_action(chat_id, "typing")
-        prompt = f"Расскажи кратко о {product}" if lang == Lang.RU else f"{product} туралы қысқаша айтып бер"
-        ai_reply = await ai_respond(
-            user_message=prompt,
-            lang=lang,
-            city=session.city,
-            conversation_history=session.conversation_history,
-        )
-
-        if ai_reply:
-            footer_ru = "\n\nЗадайте вопрос о продукте, «6» для записи на консультацию или «0» для возврата в меню."
-            footer_kk = "\n\nӨнім туралы сұрақ қойыңыз, кеңесшіге жазылу үшін «6» немесе мәзірге оралу үшін «0» жазыңыз."
-            footer = footer_ru if lang == Lang.RU else footer_kk
-            session.conversation_history.append({"role": "assistant", "content": ai_reply})
-            if len(session.conversation_history) > 10:
-                session.conversation_history = session.conversation_history[-10:]
-            save_session(chat_id, session)
-            await send_message(chat_id, ai_reply + footer)
-        else:
-            if lang == Lang.RU:
-                await send_message(
-                    chat_id,
-                    f"Вы выбрали: {product}\n\n"
-                    "Задайте вопрос или напишите «0» для возврата в меню.",
-                )
-            else:
-                await send_message(
-                    chat_id,
-                    f"Сіз таңдадыңыз: {product}\n\n"
-                    "Сұрақ қойыңыз немесе мәзірге оралу үшін «0» жазыңыз.",
-                )
+    if text in ("5", "8"):
+        # Handoff to manager
+        await _trigger_handoff(chat_id, session)
         return
 
     if text == "6":
@@ -295,6 +341,41 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
         await _trigger_handoff(chat_id, session)
         return
 
+    # Product intent (free text matched a product keyword)
+    if intent in ("1", "2", "3", "4", "5"):
+        await _show_product(chat_id, intent, session)
+        return
+
+    # --- Presentation request (when product already selected) ---
+    lower = text.lower()
+    presentation_kw = {"да", "презентация", "презентацию", "pdf", "файл", "жіберу", "презентация"}
+    if session.product and any(kw in lower for kw in presentation_kw):
+        # Find PDF key for current product
+        pdf_key = None
+        for digit, key in _PRODUCT_PDF_MAP.items():
+            if key and session.product and key in session.product.lower().replace("-", ""):
+                pdf_key = key
+                break
+        # Fallback: try to match by product content
+        if not pdf_key:
+            prod_lower = session.product.lower() if session.product else ""
+            if "greenlam" in prod_lower or "hpl" in prod_lower:
+                pdf_key = "greenlam"
+            elif "kmew" in prod_lower or "фиброцемент" in prod_lower:
+                pdf_key = "kmew"
+            elif "3mm" in prod_lower or "керамогранит" in prod_lower:
+                pdf_key = "3mm"
+
+        if pdf_key:
+            doc_path = _resolve_pdf_path(pdf_key)
+            if doc_path:
+                await send_message(chat_id, PRESENTATION_SENT[lang])
+                await send_document(chat_id, doc_path)
+                return
+            else:
+                await send_message(chat_id, PRESENTATION_NOT_FOUND[lang])
+                return
+
     # Free text → AI agent
     # Save user message to history
     session.conversation_history.append({"role": "user", "content": text})
@@ -313,7 +394,11 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
         if len(session.conversation_history) > 10:
             session.conversation_history = session.conversation_history[-10:]
         save_session(chat_id, session)
-        await send_message(chat_id, ai_reply)
+        # Append call-to-action footer
+        cta_ru = "\n\nЕсли хотите записаться на консультацию — напишите «6». Связаться с менеджером — «8»."
+        cta_kk = "\n\nКеңесшіге жазылғыңыз келсе — «6» жазыңыз. Менеджермен байланысу үшін — «8»."
+        cta = cta_ru if lang == Lang.RU else cta_kk
+        await send_message(chat_id, ai_reply + cta)
     else:
         await send_message(chat_id, UNKNOWN_INPUT[lang])
 
@@ -477,7 +562,19 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
 
         await send_message(chat_id, summary)
 
-        # TODO: Send to Bitrix24 + alert manager via WhatsApp/Telegram ops chat
+        # Send lead to Bitrix24
+        await create_lead(
+            name=d.get("name", ""),
+            phone=d.get("phone", ""),
+            city=city_name,
+            object_type=d.get("object_type"),
+            material_purpose=d.get("material_purpose"),
+            visit_type=d.get("visit_type"),
+            comment=d.get("comment"),
+            source="Telegram Bot",
+            product=session.product,
+        )
+
         logger.info(
             "Lead created: chat_id=%s city=%s off_hours=%s data=%s",
             chat_id, city_name, is_off_hours, d,

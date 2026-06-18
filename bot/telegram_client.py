@@ -1,11 +1,12 @@
 """
 Thin Telegram Bot API client via httpx.
-Handles sending messages and registering webhooks.
+Handles sending messages, documents and registering webhooks.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -46,6 +47,38 @@ async def send_message(
 async def send_chat_action(chat_id: int, action: str = "typing") -> dict:
     """Send chat action (typing indicator)."""
     return await _request("sendChatAction", chat_id=chat_id, action=action)
+
+
+async def send_document(
+    chat_id: int,
+    document: str,
+    caption: str | None = None,
+) -> dict:
+    """
+    Send a document (PDF).
+    Accepts a local file path or a Telegram file_id.
+    """
+    url = f"{_BASE_URL}/sendDocument"
+    params: dict[str, Any] = {"chat_id": chat_id}
+    if caption:
+        params["caption"] = caption
+
+    # Local file path → multipart upload
+    if Path(document).is_file():
+        async with httpx.AsyncClient(timeout=60) as client:
+            with open(document, "rb") as f:
+                resp = await client.post(url, data=params, files={"document": f})
+                if not resp.is_success:
+                    logger.error("sendDocument error: %s %s", resp.status_code, resp.text)
+                return resp.json()
+
+    # Telegram file_id → form data
+    params["document"] = document
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, data=params)
+        if not resp.is_success:
+            logger.error("sendDocument error: %s %s", resp.status_code, resp.text)
+        return resp.json()
 
 
 async def register_webhook() -> dict:

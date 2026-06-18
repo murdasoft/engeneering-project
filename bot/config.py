@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     google_sheets_id: str = Field("", description="Google Sheets document ID for stock data")
     google_service_account_json: str = Field("", description="Service account JSON (base64 or path)")
 
+    # --- PDF Presentations (file_id for webhook / local path fallback) ---
+    pdf_greenlam_file_id: str = Field("", description="Telegram file_id for Greenlam PDF")
+    pdf_kmew_file_id: str = Field("", description="Telegram file_id for KMEW PDF")
+    pdf_3mm_file_id: str = Field("", description="Telegram file_id for 3MM PDF")
+
     # --- Ops ---
     ops_alert_chat_id: str = Field("", description="Telegram chat ID for manager alerts")
     voice_debug_enabled: bool = Field(False)
