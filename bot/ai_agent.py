@@ -56,7 +56,7 @@ _PROVIDERS = {
     },
     "together": {
         "url": "https://api.together.xyz/v1/chat/completions",
-        "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "key_env": "together_api_key",
     },
 }
