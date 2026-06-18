@@ -1,5 +1,5 @@
 """
-AI agent — Together API (Meta Llama 3.1 70B).
+AI agent — supports Groq and Together APIs.
 KB-grounded responses: only answers from knowledge base, no hallucinations.
 """
 
@@ -15,8 +15,19 @@ from bot.models import Lang, City
 
 logger = logging.getLogger(__name__)
 
-_TOGETHER_URL = "https://api.together.xyz/v1/chat/completions"
-_MODEL = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+# Provider configs
+_PROVIDERS = {
+    "groq": {
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "model": "llama-3.1-70b-versatile",
+        "key_env": "groq_api_key",
+    },
+    "together": {
+        "url": "https://api.together.xyz/v1/chat/completions",
+        "model": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+        "key_env": "together_api_key",
+    },
+}
 
 # --- Knowledge Base (will be extended with price lists, Google Sheets, etc.) ---
 
@@ -175,11 +186,18 @@ async def ai_respond(
     conversation_history: list[dict[str, str]] | None = None,
 ) -> str | None:
     """
-    Get AI response from Together API.
+    Get AI response from configured provider (groq | together).
     Returns response text or None if AI is unavailable.
     """
-    if not settings.together_api_key:
-        logger.warning("Together API key not configured")
+    provider = settings.ai_provider.lower()
+    if provider not in _PROVIDERS:
+        logger.error("Unknown AI provider: %s", provider)
+        return None
+
+    cfg = _PROVIDERS[provider]
+    api_key = getattr(settings, cfg["key_env"], "")
+    if not api_key:
+        logger.error("AI provider %s: missing API key (%s)", provider, cfg["key_env"])
         return None
 
     system_prompt = _get_system_prompt(lang)
@@ -189,7 +207,6 @@ async def ai_respond(
 
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
 
-    # Add conversation history (last 6 messages for context)
     if conversation_history:
         messages.extend(conversation_history[-6:])
 
@@ -198,29 +215,32 @@ async def ai_respond(
     try:
         async with httpx.AsyncClient(timeout=25) as client:
             resp = await client.post(
-                _TOGETHER_URL,
+                cfg["url"],
                 headers={
-                    "Authorization": f"Bearer {settings.together_api_key}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": _MODEL,
+                    "model": cfg["model"],
                     "messages": messages,
                     "max_tokens": 500,
                     "temperature": 0.3,
-                    "stop": None,
                 },
             )
             data = resp.json()
 
             if resp.status_code != 200:
-                logger.error("Together API error: %s %s", resp.status_code, data)
+                logger.error("%s API error %s: %s", provider, resp.status_code, data)
+                return None
+
+            if "choices" not in data or not data["choices"]:
+                logger.error("%s API empty response: %s", provider, data)
                 return None
 
             return data["choices"][0]["message"]["content"].strip()
 
     except Exception as e:
-        logger.error("Together API exception: %s", e, exc_info=True)
+        logger.error("%s API exception: %s", provider, e, exc_info=True)
         return None
 
 
