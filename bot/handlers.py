@@ -376,6 +376,40 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
                 await send_message(chat_id, PRESENTATION_NOT_FOUND[lang])
                 return
 
+    # --- Pre-AI FAQ fallback (works even if AI is down) ---
+    lower = text.lower()
+    faq_fallback = None
+    if any(kw in lower for kw in {"что делает", "что ты", "кто ты", "помощь", "help", "бот", "чат", "возможности"}):
+        faq_fallback = (
+            "Я — виртуальный ассистент ТОО «Агрегатор».\n\n"
+            "Что я умею:\n"
+            "• Рассказать о наших материалах (HPL, KMEW, керамогранит)\n"
+            "• Отправить PDF-презентацию\n"
+            "• Записать вас на консультацию с менеджером\n"
+            "• Переключить на живого менеджера\n\n"
+            "Выберите номер из меню или просто напишите, что вас интересует."
+        ) if lang == Lang.RU else (
+            "Мен — ТОО «Агрегатор» виртуалды көмекшісімін.\n\n"
+            "Істей аламын:\n"
+            "• Біздің материалдар туралы айту (HPL, KMEW, керамогранит)\n"
+            "• PDF-презентация жіберу\n"
+            "• Менеджерге кеңес беруге жазу\n"
+            "• Тірі менеджерге қосу\n\n"
+            "Мәзірден нөмір таңдаңыз немесе не қызықтыратынын жазыңыз."
+        )
+    elif any(kw in lower for kw in {"цена", "сколько", "стоимость", "прайс", "баға", "қанша"}):
+        faq_fallback = (
+            "Цены зависят от объёма, типа объекта и сроков поставки.\n"
+            "Для точного расчёта запишитесь на консультацию — напишите «6»."
+        ) if lang == Lang.RU else (
+            "Бағалар көлемге, объект түріне және жеткізу мерзіміне байланысты.\n"
+            "Нақты есеп үшін кеңесшіге жазылу үшін «6» жазыңыз."
+        )
+
+    if faq_fallback:
+        await send_message(chat_id, faq_fallback)
+        return
+
     # Free text → AI agent
     # Save user message to history
     session.conversation_history.append({"role": "user", "content": text})
@@ -400,7 +434,18 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
         cta = cta_ru if lang == Lang.RU else cta_kk
         await send_message(chat_id, ai_reply + cta)
     else:
-        await send_message(chat_id, UNKNOWN_INPUT[lang])
+        # AI failed — give contextual fallback instead of generic "don't understand"
+        fallback_ru = (
+            "Я пока не могу ответить на это вопрос через ИИ.\n\n"
+            "Выберите номер из меню или напишите ваш вопрос иначе.\n"
+            "Если срочно — свяжитесь с менеджером: «8»."
+        )
+        fallback_kk = (
+            "Мен әзірге бұл сұраққа жауап бере алмаймын.\n\n"
+            "Мәзірден нөмір таңдаңыз немесе сұрағыңызды басқаша жазыңыз.\n"
+            "Тез арада — менеджермен байланысыңыз: «8»."
+        )
+        await send_message(chat_id, fallback_ru if lang == Lang.RU else fallback_kk)
 
 
 async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
