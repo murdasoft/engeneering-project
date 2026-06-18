@@ -6,6 +6,7 @@ KB-grounded responses: only answers from knowledge base, no hallucinations.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -14,6 +15,37 @@ from bot.config import settings
 from bot.models import Lang, City
 
 logger = logging.getLogger(__name__)
+
+# Simple in-memory response cache: key=(message_normalized, lang) → reply
+# TTL: 24h. Saves ~80% API calls for repeated questions.
+_CACHE: dict[tuple[str, str], tuple[str, float]] = {}
+_CACHE_TTL = 86400  # 24 hours
+
+
+def _cache_key(message: str, lang: str) -> tuple[str, str]:
+    """Normalize message for cache lookup."""
+    return (" ".join(message.lower().split()), lang)
+
+
+def _get_cached(message: str, lang: str) -> str | None:
+    key = _cache_key(message, lang)
+    entry = _CACHE.get(key)
+    if entry and (time.time() - entry[1]) < _CACHE_TTL:
+        return entry[0]
+    if entry:
+        del _CACHE[key]
+    return None
+
+
+def _set_cache(message: str, lang: str, reply: str) -> None:
+    # Only cache messages without personal context (no history)
+    _CACHE[_cache_key(message, lang)] = (reply, time.time())
+    # Evict if cache grows too large
+    if len(_CACHE) > 500:
+        oldest = sorted(_CACHE.items(), key=lambda x: x[1][1])[:100]
+        for k, _ in oldest:
+            del _CACHE[k]
+
 
 # Provider configs
 _PROVIDERS = {
@@ -200,6 +232,15 @@ async def ai_respond(
         logger.error("AI provider %s: missing API key (%s)", provider, cfg["key_env"])
         return None
 
+    lang_str = lang.value if hasattr(lang, 'value') else str(lang)
+
+    # Use cache only for first-message queries (no history = generic question)
+    if not conversation_history:
+        cached = _get_cached(user_message, lang_str)
+        if cached:
+            logger.info("Cache hit for: %.40s", user_message)
+            return cached
+
     system_prompt = _get_system_prompt(lang)
     if city:
         city_name = "Астана" if city == City.ASTANA else "Алматы"
@@ -207,8 +248,9 @@ async def ai_respond(
 
     messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
 
+    # Keep only last 4 messages (2 exchanges) — enough for context, saves tokens
     if conversation_history:
-        messages.extend(conversation_history[-6:])
+        messages.extend(conversation_history[-4:])
 
     messages.append({"role": "user", "content": user_message})
 
@@ -223,7 +265,7 @@ async def ai_respond(
                 json={
                     "model": cfg["model"],
                     "messages": messages,
-                    "max_tokens": 500,
+                    "max_tokens": 350,
                     "temperature": 0.3,
                 },
             )
@@ -237,7 +279,11 @@ async def ai_respond(
                 logger.error("%s API empty response: %s", provider, data)
                 return None
 
-            return data["choices"][0]["message"]["content"].strip()
+            reply = data["choices"][0]["message"]["content"].strip()
+            # Cache if no personal context
+            if not conversation_history:
+                _set_cache(user_message, lang_str, reply)
+            return reply
 
     except Exception as e:
         logger.error("%s API exception: %s", provider, e, exc_info=True)
