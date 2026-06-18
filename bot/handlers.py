@@ -137,11 +137,27 @@ async def handle_message(chat_id: int, text: str) -> None:
 
     # --- Wizard: Language selection ---
     if session.state == BotState.SELECTING_LANG:
+        # If free text (not "1" or "2") — auto-detect language and skip wizard
+        # This handles serverless resets where session is lost between requests
+        if text not in ("1", "2"):
+            detected = detect_language(text)
+            session.lang = detected or _DEFAULT_LANG
+            session.lang_locked = True
+            session.state = BotState.IDLE
+            save_session(chat_id, session)
+            await _handle_menu(chat_id, text, session)
+            return
         await _handle_lang_selection(chat_id, text, session)
         return
 
     # --- Wizard: City selection ---
     if session.state == BotState.SELECTING_CITY:
+        # If free text (not "1" or "2") — skip city, use default and answer
+        if text not in ("1", "2"):
+            session.state = BotState.IDLE
+            save_session(chat_id, session)
+            await _handle_menu(chat_id, text, session)
+            return
         await _handle_city_selection(chat_id, text, session)
         return
 

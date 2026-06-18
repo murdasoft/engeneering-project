@@ -18,6 +18,34 @@ _BASE = settings.bitrix24_webhook_url.rstrip("/")
 _LEAD_ADD_URL = f"{_BASE}/crm.lead.add.json"
 
 
+def _build_title(source: str, product: str | None = None) -> str:
+    title = f"Заявка из {source}"
+    if product:
+        title += f" — {product}"
+    return title
+
+
+def _build_comment(
+    city: str | None = None,
+    object_type: str | None = None,
+    material_purpose: str | None = None,
+    visit_type: str | None = None,
+    comment: str | None = None,
+) -> str:
+    parts = []
+    if city:
+        parts.append(f"Город: {city}")
+    if object_type:
+        parts.append(f"Тип объекта: {object_type}")
+    if material_purpose:
+        parts.append(f"Назначение: {material_purpose}")
+    if visit_type:
+        parts.append(f"Формат встречи: {visit_type}")
+    if comment:
+        parts.append(f"Комментарий: {comment}")
+    return "\n".join(parts) if parts else ""
+
+
 async def create_lead(
     name: str,
     phone: str,
@@ -37,25 +65,8 @@ async def create_lead(
         logger.warning("Bitrix24 webhook URL is not configured, skipping lead creation")
         return None
 
-    # Build title
-    title = f"Заявка из {source}"
-    if product:
-        title += f" — {product}"
-
-    # Build comment block with structured data
-    comments_parts = []
-    if city:
-        comments_parts.append(f"Город: {city}")
-    if object_type:
-        comments_parts.append(f"Тип объекта: {object_type}")
-    if material_purpose:
-        comments_parts.append(f"Назначение: {material_purpose}")
-    if visit_type:
-        comments_parts.append(f"Формат встречи: {visit_type}")
-    if comment:
-        comments_parts.append(f"Комментарий: {comment}")
-
-    full_comment = "\n".join(comments_parts) if comments_parts else ""
+    title = _build_title(source, product)
+    full_comment = _build_comment(city, object_type, material_purpose, visit_type, comment)
 
     # Prepare payload
     fields: dict[str, Any] = {
