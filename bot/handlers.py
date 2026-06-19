@@ -6,6 +6,7 @@ Wizard → Menu → FAQ/AI → Handoff.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from datetime import datetime, timezone, timedelta
 
@@ -479,7 +480,31 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
         return
 
     if session.flow_step == "ask_phone":
-        session.data["phone"] = text
+        # Validate phone: strip non-digits, check length
+        digits = re.sub(r"\D", "", text)
+        if len(digits) < 10:
+            if lang == Lang.RU:
+                await send_message(
+                    chat_id,
+                    "Пожалуйста, введите корректный номер телефона.\n"
+                    "Например: +7 777 123 45 67 или 8 777 123 45 67",
+                )
+            else:
+                await send_message(
+                    chat_id,
+                    "Дұрыс телефон нөмірін енгізіңіз.\n"
+                    "Мысалы: +7 777 123 45 67 немесе 8 777 123 45 67",
+                )
+            return
+        # Normalize: ensure starts with +7 for KZ numbers
+        if digits.startswith("8") and len(digits) == 11:
+            digits = "7" + digits[1:]
+        elif digits.startswith("7") and len(digits) == 11:
+            pass
+        elif len(digits) == 10:
+            digits = "7" + digits
+        phone = "+" + digits
+        session.data["phone"] = phone
         session.flow_step = "ask_object_type"
         save_session(chat_id, session)
         if lang == Lang.RU:
