@@ -675,5 +675,26 @@ async def _trigger_handoff(chat_id: int, session: Session) -> None:
                 "Сіздің хабарламаңыз сақталды.",
             )
 
-    # TODO: Send notification to ops alert chat / manager WhatsApp
-    logger.info("Handoff triggered: chat_id=%s off_hours=%s", chat_id, _is_off_hours())
+    # Create lead in Bitrix24 with available data
+    city_name = "Астана" if session.city == City.ASTANA else "Алматы" if session.city else None
+    await create_lead(
+        name="Telegram пользователь",
+        phone="",
+        city=city_name,
+        source="Telegram Bot — Запрос менеджера",
+        product=session.product,
+        comment="Пользователь запросил связь с менеджером через кнопку «8»",
+    )
+
+    # Notify ops chat if configured
+    if settings.ops_alert_chat_id:
+        notify_ru = (
+            f"🔔 Запрос менеджера в Telegram-боте\n"
+            f"Chat ID: {chat_id}\n"
+            f"Город: {city_name or 'не указан'}\n"
+            f"Продукт: {session.product or 'не указан'}\n"
+            f"Время: {'нерабочее' if _is_off_hours() else 'рабочее'}"
+        )
+        await send_message(int(settings.ops_alert_chat_id), notify_ru)
+
+    logger.info("Handoff triggered: chat_id=%s off_hours=%s lead_created", chat_id, _is_off_hours())
