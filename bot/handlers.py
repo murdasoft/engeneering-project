@@ -316,9 +316,9 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
         session.flow_step = "ask_name"
         save_session(chat_id, session)
         if lang == Lang.RU:
-            await send_message(chat_id, "Отлично! Давайте запишем вас на консультацию.\nКак вас зовут?")
+            await send_message(chat_id, "Отлично! Давайте запишем вас на консультацию.\nКак вас зовут?\nНапример: Александр")
         else:
-            await send_message(chat_id, "Тамаша! Сізді кеңесшіге жазайық.\nСіздің атыңыз?")
+            await send_message(chat_id, "Тамаша! Сізді кеңесшіге жазайық.\nСіздің атыңыз?\nМысалы: Әлібек")
         return
 
     if text == "7":
@@ -349,9 +349,9 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
         session.flow_step = "ask_name"
         save_session(chat_id, session)
         if lang == Lang.RU:
-            await send_message(chat_id, "Отлично! Давайте запишем вас на консультацию.\nКак вас зовут?")
+            await send_message(chat_id, "Отлично! Давайте запишем вас на консультацию.\nКак вас зовут?\nНапример: Александр")
         else:
-            await send_message(chat_id, "Тамаша! Сізді кеңесшіге жазайық.\nСіздің атыңыз?")
+            await send_message(chat_id, "Тамаша! Сізді кеңесшіге жазайық.\nСіздің атыңыз?\nМысалы: Әлібек")
         return
 
     if intent == "8":
@@ -474,9 +474,17 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
         session.flow_step = "ask_phone"
         save_session(chat_id, session)
         if lang == Lang.RU:
-            await send_message(chat_id, "Ваш номер телефона для связи?")
+            await send_message(
+                chat_id,
+                "Ваш номер телефона для связи?\n"
+                "Например: +7 777 123 45 67",
+            )
         else:
-            await send_message(chat_id, "Байланыс үшін телефон нөміріңіз?")
+            await send_message(
+                chat_id,
+                "Байланыс үшін телефон нөміріңіз?\n"
+                "Мысалы: +7 777 123 45 67",
+            )
         return
 
     if session.flow_step == "ask_phone":
@@ -515,7 +523,8 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
                 "2 — Частный дом\n"
                 "3 — Коммерческое здание\n"
                 "4 — Административное здание\n"
-                "5 — Другое",
+                "5 — Другое\n\n"
+                "Например: 1",
             )
         else:
             await send_message(
@@ -525,7 +534,8 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
                 "2 — Жеке үй\n"
                 "3 — Коммерциялық ғимарат\n"
                 "4 — Әкімшілік ғимарат\n"
-                "5 — Басқа",
+                "5 — Басқа\n\n"
+                "Мысалы: 1",
             )
         return
 
@@ -549,7 +559,8 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
                 "1 — Фасад\n"
                 "2 — Интерьер\n"
                 "3 — Кровля\n"
-                "4 — Не определился",
+                "4 — Не определился\n\n"
+                "Например: 1",
             )
         else:
             await send_message(
@@ -558,7 +569,8 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
                 "1 — Қасбет (фасад)\n"
                 "2 — Интерьер\n"
                 "3 — Шатыр (кровля)\n"
-                "4 — Анықталмаған",
+                "4 — Анықталмаған\n\n"
+                "Мысалы: 1",
             )
         return
 
@@ -574,14 +586,16 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
                 chat_id,
                 "Как удобнее?\n"
                 "1 — Консультация в офисе\n"
-                "2 — Встреча на объекте",
+                "2 — Встреча на объекте\n\n"
+                "Например: 1",
             )
         else:
             await send_message(
                 chat_id,
                 "Қалай ыңғайлы?\n"
                 "1 — Кеңседе кеңес алу\n"
-                "2 — Объектіде кездесу",
+                "2 — Объектіде кездесу\n\n"
+                "Мысалы: 1",
             )
         return
 
@@ -596,9 +610,17 @@ async def _handle_flow(chat_id: int, text: str, session: Session) -> None:
         session.flow_step = "ask_comment"
         save_session(chat_id, session)
         if lang == Lang.RU:
-            await send_message(chat_id, "Есть ли комментарий или пожелание? (или напишите «нет»)")
+            await send_message(
+                chat_id,
+                "Есть ли комментарий или пожелание?\n"
+                "Например: нужен расчёт на 500 м² или «нет»",
+            )
         else:
-            await send_message(chat_id, "Пікіріңіз немесе тілегіңіз бар ма? (немесе «жоқ» деп жазыңыз)")
+            await send_message(
+                chat_id,
+                "Пікіріңіз немесе тілегіңіз бар ма?\n"
+                "Мысалы: 500 м²-ге есеп керек немесе «жоқ»",
+            )
         return
 
     if session.flow_step == "ask_comment":
