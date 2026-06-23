@@ -530,3 +530,149 @@ def detect_intent(text: str) -> str | None:
         return "7"
 
     return None  # Free text → AI
+
+
+# ---------------------------------------------------------------------------
+# Hybrid chat system prompt — AI can trigger menu actions via JSON
+# ---------------------------------------------------------------------------
+
+_HYBRID_SYSTEM_RU = f"""Ты — виртуальный ассистент компании «Агрегатор» (ТОО «Агрегатор»). Ты работаешь в гибридном режиме: можешь отвечать текстом ИЛИ выполнять действие в боте.
+
+ПРАВИЛА ОТВЕТА:
+Отвечай в одном из двух форматов:
+
+1. ТЕКСТОВЫЙ ОТВЕТ (обычный вопрос по продуктам/компании):
+Просто пиши текст. 2-4 предложения. Заканчивай призывом к действию.
+
+2. JSON-ДЕЙСТВИЕ (когда нужно показать продукт, оформить заявку или передать менеджеру):
+Отвечай ТОЛЬКО валидным JSON в таком формате:
+{{"action": "show_product", "digit": "1", "intro": "Конечно! Вот информация об HPL-панелях для фасада:"}}
+
+Возможные actions:
+- "show_product" + digit "1"/"2"/"3"/"4" — показать карточку продукта
+- "start_consultation" — запустить оформление заявки (если клиент готов)
+- "handoff" — передать менеджеру (если клиент настаивает на живом разговоре)
+
+Когда использовать JSON:
+- Клиент спрашивает о конкретном продукте → show_product
+- Клиент говорит «хочу заказать», «запишите меня», «оставить заявку» → start_consultation
+- Клиент говорит «позовите менеджера», «хочу с человеком» → handoff
+- Во всех остальных случаях → текст
+
+БАЗА ЗНАНИЙ:
+{_KB}
+
+ВАЖНО: Не выдумывай. Отвечай только из базы знаний. Язык — как у клиента."""
+
+_HYBRID_SYSTEM_KK = f"""Сен «Агрегатор» компаниясының (ТОО «Агрегатор») виртуалды көмекшісісін. Гибридтік режимде жұмыс жасайсың: мәтінмен жауап бере аласың НЕМЕСЕ боттағы іс-әрекетті орындай аласың.
+
+ЖАУАП ЕРЕЖЕЛЕРІ:
+Екі форматтың бірінде жауап бер:
+
+1. МӘТІНДІК ЖАУАП (өнімдер/компания туралы қарапайым сұрақ):
+Тек мәтін жаз. 2-4 сөйлем. Әрекетке шақырумен аяқта.
+
+2. JSON-ІCКЕРЛІК (өнімді көрсету, өтінім ресімдеу немесе менеджерге беру керек болса):
+ТЕК осындай форматта жарамды JSON жаз:
+{{"action": "show_product", "digit": "1", "intro": "Әрине! HPL-фасад панельдері туралы ақпарат:"}}
+
+Мүмкін actions:
+- "show_product" + digit "1"/"2"/"3"/"4" — өнім картасын көрсету
+- "start_consultation" — өтінім ресімдеуді бастау (клиент дайын болса)
+- "handoff" — менеджерге беру (тірі адаммен сөйлескісі келсе)
+
+JSON қашан қолданылады:
+- Клиент нақты өнім туралы сұрайды → show_product
+- Клиент «тапсырыс беремін», «жазып қойыңыз» дейді → start_consultation
+- Клиент «менеджер шақырыңыз», «адаммен сөйлеймін» дейді → handoff
+- Қалған барлық жағдайда → мәтін
+
+БІЛІМ БАЗАСЫ:
+{_KB}
+
+МАҢЫЗДЫ: Ойлап шығарма. Тек білім базасынан жауап бер. Тіл — клиенттің тілінде."""
+
+
+async def ai_chat(
+    user_message: str,
+    lang: Lang,
+    city: City | None = None,
+    conversation_history: list[dict[str, str]] | None = None,
+) -> dict:
+    """
+    Hybrid AI chat: returns dict with either:
+    - {"type": "text", "text": "..."} — plain reply
+    - {"type": "action", "action": "show_product", "digit": "1", "intro": "..."}
+    - {"type": "action", "action": "start_consultation"}
+    - {"type": "action", "action": "handoff"}
+    - {"type": "error"} — AI unavailable
+    """
+    import json as _json
+
+    provider = settings.ai_provider.lower()
+    if provider not in _PROVIDERS:
+        logger.error("Unknown AI provider for ai_chat: %s", provider)
+        return {"type": "error"}
+
+    cfg = _PROVIDERS[provider]
+    api_key = getattr(settings, cfg["key_env"], "")
+    if not api_key:
+        logger.error("ai_chat: missing API key for %s", provider)
+        return {"type": "error"}
+
+    system_prompt = _HYBRID_SYSTEM_KK if lang == Lang.KK else _HYBRID_SYSTEM_RU
+    if city:
+        city_name = "Астана" if city == City.ASTANA else "Алматы"
+        system_prompt += f"\n\nГород клиента: {city_name}" if lang == Lang.RU else f"\n\nКлиент қаласы: {city_name}"
+
+    messages: list[dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    if conversation_history:
+        messages.extend(conversation_history[-6:])
+    messages.append({"role": "user", "content": user_message})
+
+    try:
+        async with httpx.AsyncClient(timeout=40) as client:
+            resp = await client.post(
+                cfg["url"],
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": cfg["model"],
+                    "messages": messages,
+                    "max_tokens": 500,
+                    "temperature": 0.3,
+                },
+            )
+            data = resp.json()
+
+            if resp.status_code != 200:
+                logger.error("ai_chat API error %s: %s", resp.status_code, data)
+                return {"type": "error"}
+
+            if "choices" not in data or not data["choices"]:
+                return {"type": "error"}
+
+            raw = data["choices"][0]["message"]["content"].strip()
+
+            # Try to parse as JSON action
+            if raw.startswith("{"):
+                try:
+                    parsed = _json.loads(raw)
+                    action = parsed.get("action", "")
+                    if action in ("show_product", "start_consultation", "handoff"):
+                        result: dict = {"type": "action", "action": action}
+                        if action == "show_product":
+                            result["digit"] = str(parsed.get("digit", "1"))
+                        result["intro"] = parsed.get("intro", "")
+                        return result
+                except (_json.JSONDecodeError, ValueError):
+                    pass
+
+            # Plain text reply
+            return {"type": "text", "text": raw}
+
+    except Exception as e:
+        logger.error("ai_chat exception: %s", e, exc_info=True)
+        return {"type": "error"}

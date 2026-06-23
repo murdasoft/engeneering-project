@@ -53,7 +53,6 @@ async def transcribe_voice(audio_url: str) -> str | None:
                         files={"file": ("voice.ogg", f, "audio/ogg")},
                         data={
                             "model": _STT_MODEL,
-                            "language": "ru",
                         },
                     )
 

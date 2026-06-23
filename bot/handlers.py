@@ -27,7 +27,7 @@ from bot.content import (
 )
 from bot.lang_detect import detect_language
 from bot.telegram_client import send_message, send_chat_action, send_document
-from bot.ai_agent import ai_respond, detect_intent, detect_product_intent
+from bot.ai_agent import ai_respond, ai_chat, detect_intent, detect_product_intent
 from bot.crm import create_lead
 from bot.config import settings
 
@@ -393,73 +393,65 @@ async def _handle_menu(chat_id: int, text: str, session: Session) -> None:
                 await send_message(chat_id, PRESENTATION_NOT_FOUND[lang])
                 return
 
-    # --- Pre-AI FAQ fallback (works even if AI is down) ---
-    lower = text.lower()
-    faq_fallback = None
-    if any(kw in lower for kw in {"что делает", "что ты", "кто ты", "помощь", "help", "бот", "чат", "возможности"}):
-        faq_fallback = (
-            "Я — виртуальный ассистент ТОО «Агрегатор».\n\n"
-            "Что я умею:\n"
-            "• Рассказать о наших материалах (HPL, KMEW, керамогранит)\n"
-            "• Отправить PDF-презентацию\n"
-            "• Записать вас на консультацию с менеджером\n"
-            "• Переключить на живого менеджера\n\n"
-            "Выберите номер из меню или просто напишите, что вас интересует."
-        ) if lang == Lang.RU else (
-            "Мен — ТОО «Агрегатор» виртуалды көмекшісімін.\n\n"
-            "Істей аламын:\n"
-            "• Біздің материалдар туралы айту (HPL, KMEW, керамогранит)\n"
-            "• PDF-презентация жіберу\n"
-            "• Менеджерге кеңес беруге жазу\n"
-            "• Тірі менеджерге қосу\n\n"
-            "Мәзірден нөмір таңдаңыз немесе не қызықтыратынын жазыңыз."
-        )
-    elif any(kw in lower for kw in {"цена", "сколько", "стоимость", "прайс", "баға", "қанша"}):
-        faq_fallback = (
-            "Цены зависят от объёма, типа объекта и сроков поставки.\n"
-            "Для точного расчёта запишитесь на консультацию — напишите «6»."
-        ) if lang == Lang.RU else (
-            "Бағалар көлемге, объект түріне және жеткізу мерзіміне байланысты.\n"
-            "Нақты есеп үшін кеңесшіге жазылу үшін «6» жазыңыз."
-        )
-
-    if faq_fallback:
-        await send_message(chat_id, faq_fallback)
-        return
-
-    # Free text → AI agent
+    # --- Hybrid AI chat mode (free text) ---
     # Save user message to history
     session.conversation_history.append({"role": "user", "content": text})
     save_session(chat_id, session)
 
-    ai_reply = await ai_respond(
+    await send_chat_action(chat_id, "typing")
+    result = await ai_chat(
         user_message=text,
         lang=lang,
         city=session.city,
         conversation_history=session.conversation_history,
     )
 
-    if ai_reply:
-        session.conversation_history.append({"role": "assistant", "content": ai_reply})
-        # Keep history manageable (last 10 messages)
-        if len(session.conversation_history) > 10:
-            session.conversation_history = session.conversation_history[-10:]
+    if result["type"] == "text":
+        reply = result["text"]
+        session.conversation_history.append({"role": "assistant", "content": reply})
+        if len(session.conversation_history) > 12:
+            session.conversation_history = session.conversation_history[-12:]
         save_session(chat_id, session)
-        # Append call-to-action footer
-        cta_ru = "\n\nЕсли хотите записаться на консультацию — напишите «6». Связаться с менеджером — «8»."
-        cta_kk = "\n\nКеңесшіге жазылғыңыз келсе — «6» жазыңыз. Менеджермен байланысу үшін — «8»."
-        cta = cta_ru if lang == Lang.RU else cta_kk
-        await send_message(chat_id, ai_reply + cta)
+        await send_message(chat_id, reply)
+
+    elif result["type"] == "action":
+        action = result["action"]
+        intro = result.get("intro", "")
+
+        if action == "show_product":
+            digit = result.get("digit", "1")
+            if intro:
+                await send_message(chat_id, intro)
+            session.conversation_history.append({"role": "assistant", "content": intro or f"Показываю продукт {digit}"})
+            save_session(chat_id, session)
+            await _show_product(chat_id, digit, session)
+
+        elif action == "start_consultation":
+            if intro:
+                await send_message(chat_id, intro)
+            session.state = BotState.IN_FLOW
+            session.flow_step = "ask_name"
+            save_session(chat_id, session)
+            if lang == Lang.RU:
+                await send_message(chat_id, "Отлично! Давайте запишем вас на консультацию.\nКак вас зовут?\nНапример: Александр")
+            else:
+                await send_message(chat_id, "Тамаша! Сізді кеңесшіге жазайық.\nСіздің атыңыз?\nМысалы: Әлібек")
+
+        elif action == "handoff":
+            if intro:
+                await send_message(chat_id, intro)
+            await _trigger_handoff(chat_id, session)
+
     else:
-        # AI failed — give contextual fallback instead of generic "don't understand"
+        # AI error fallback
         fallback_ru = (
-            "Я пока не могу ответить на это вопрос через ИИ.\n\n"
-            "Выберите номер из меню или напишите ваш вопрос иначе.\n"
+            "Я пока не могу ответить на этот вопрос.\n\n"
+            "Выберите номер из меню или напишите иначе.\n"
             "Если срочно — свяжитесь с менеджером: «8»."
         )
         fallback_kk = (
             "Мен әзірге бұл сұраққа жауап бере алмаймын.\n\n"
-            "Мәзірден нөмір таңдаңыз немесе сұрағыңызды басқаша жазыңыз.\n"
+            "Мәзірден нөмір таңдаңыз немесе басқаша жазыңыз.\n"
             "Тез арада — менеджермен байланысыңыз: «8»."
         )
         await send_message(chat_id, fallback_ru if lang == Lang.RU else fallback_kk)
