@@ -447,10 +447,9 @@ async def ai_respond(
 _PRODUCT_INTENTS: dict[str, list[str]] = {
     "1": [  # HPL для фасада
         "hpl", "greenlam", "гринлам", "грин", "панель", "панели", "фасадная панель",
-        "фасад", "облицовка", "hpl панель", "ламинат", "компакт", "экстерьер",
+        "облицовка", "hpl панель", "ламинат", "компакт", "экстерьер",
         "фасадный", "наружная", "снаружи", "фасадқа", "сыртқы",
-        "нвф", "вентфасад", "вентилируемый", "вентилируемый фасад",
-        "навесной фасад", "навесной", "ventfasad", "ventiliruemiy",
+        "фасад hpl", "hpl фасад", "greenlam фасад", "greenlam наружный",
     ],
     "2": [  # HPL для интерьера
         "интерьер", "внутренняя", "внутри", "отделка", "стеновая", "декоративная",
@@ -506,8 +505,8 @@ def detect_intent(text: str) -> str | None:
     if any(kw in lower for kw in manager_kw):
         return "8"
 
-    # FAQ keywords
-    faq_kw = ["вопрос", "часто", "faq", "справка", "помощь", "как", "что такое"]
+    # FAQ keywords (menu selection only, not natural language questions)
+    faq_kw = ["часто", "faq", "справка", "помощь"]
     if any(kw in lower for kw in faq_kw):
         return "7"
 
