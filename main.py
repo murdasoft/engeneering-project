@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 from bot.config import settings
 from bot.handlers import handle_message, handle_start
+from bot.sessions import is_update_processed, mark_update_processed
 from bot.telegram_client import register_webhook, send_chat_action, send_message
 
 logging.basicConfig(
@@ -73,6 +74,14 @@ async def telegram_webhook(
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    # Deduplicate: skip already processed updates (Telegram retries)
+    update_id = body.get("update_id")
+    if update_id:
+        if await is_update_processed(update_id):
+            logger.info("Duplicate update_id %s skipped", update_id)
+            return JSONResponse({"ok": True})
+        await mark_update_processed(update_id)
 
     # Extract message
     message = body.get("message")

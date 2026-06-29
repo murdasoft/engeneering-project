@@ -78,6 +78,34 @@ async def save_session(chat_id: int, session: Session) -> None:
     _sessions[chat_id] = session
 
 
+async def is_update_processed(update_id: int) -> bool:
+    """Check if a Telegram update was already processed (dedup)."""
+    col = _get_collection()
+    if col is not None:
+        try:
+            _updates_col = col.database["processed_updates"]
+            doc = await _updates_col.find_one({"_id": str(update_id)})
+            return doc is not None
+        except Exception as e:
+            logger.warning("MongoDB is_update_processed failed: %s", e)
+    return False
+
+
+async def mark_update_processed(update_id: int) -> None:
+    """Mark a Telegram update as processed with 5-min TTL."""
+    col = _get_collection()
+    if col is not None:
+        try:
+            _updates_col = col.database["processed_updates"]
+            await _updates_col.update_one(
+                {"_id": str(update_id)},
+                {"$set": {"processed_at": time.time()}},
+                upsert=True,
+            )
+        except Exception as e:
+            logger.warning("MongoDB mark_update_processed failed: %s", e)
+
+
 async def reset_session(chat_id: int) -> Session:
     """Reset session to initial state."""
     col = _get_collection()
