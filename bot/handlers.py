@@ -178,10 +178,18 @@ async def handle_message(chat_id: int, text: str) -> None:
 
 
 async def handle_start(chat_id: int) -> None:
-    """Handle /start command — reset session and show greeting."""
+    """Handle /start command — reset session and show bilingual greeting."""
     await reset_session(chat_id)
-    # Send bilingual greeting
-    await send_message(chat_id, GREETING[_DEFAULT_LANG])
+    # Send greeting in both languages for neutrality
+    greeting = (
+        "Здравствуйте! / Сәлеметсіз бе!\n"
+        "Я — виртуальный ассистент компании «Агрегатор».\n"
+        "Мен — «Агрегатор» компаниясының виртуалды көмекшісімін.\n\n"
+        "Выберите язык / Тілді таңдаңыз:\n"
+        "1 — Русский\n"
+        "2 — Қазақша"
+    )
+    await send_message(chat_id, greeting)
 
 
 # =============================================================================
