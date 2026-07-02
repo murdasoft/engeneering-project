@@ -36,6 +36,24 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None)):
 
 _model = None
 
+
+def get_model():
+    global _model
+    if _model is None:
+        from ultralytics import YOLO
+        # Try local model files first, then HF model
+        for path in ["best.pt", "models/best.pt"]:
+            if os.path.exists(path):
+                _model = YOLO(path)
+                return _model
+        # Try HF model
+        try:
+            _model = YOLO(HF_MODEL)
+        except Exception as e:
+            # Fallback to yolov8n pretrained
+            _model = YOLO("yolov8n.pt")
+    return _model
+
 CLASS_COLORS = {
     "crack": (196, 84, 61),
     "Crack": (196, 84, 61),
@@ -49,18 +67,6 @@ DEFAULT_COLORS = [
     (196, 84, 61), (194, 138, 44), (123, 107, 138),
     (107, 123, 138), (62, 101, 125), (138, 148, 148),
 ]
-
-
-def get_model():
-    global _model
-    if _model is None:
-        from ultralytics import YOLO
-        model_path = os.getenv("MODEL_PATH", "")
-        if model_path and os.path.exists(model_path):
-            _model = YOLO(model_path)
-        else:
-            _model = YOLO(HF_MODEL)
-    return _model
 
 
 def get_class_name(model, cls_id: int) -> str:
@@ -114,8 +120,11 @@ def draw_annotations(img_array: np.ndarray, detections: list) -> np.ndarray:
         draw.rectangle([x1, y1, x2, y2], outline=color, width=thickness)
 
         label = f"{cls} {conf:.0%} [{sev.upper()}]"
-        bbox_text = draw.textbbox((x1, y1 - font_size - 4), label, font=font)
-        draw.rectangle(bbox_text, fill=color)
+        try:
+            bbox_text = draw.textbbox((x1, y1 - font_size - 4), label, font=font)
+            draw.rectangle(bbox_text, fill=color)
+        except Exception:
+            pass
         draw.text((x1, y1 - font_size - 4), label, fill=(255, 255, 255), font=font)
 
     return np.array(pil_img)
@@ -482,8 +491,11 @@ async def predict(
     h, w = img_array.shape[:2]
 
     start_time = time.time()
-    model = get_model()
-    results = model(img_array, conf=CONFIDENCE_THRESHOLD, verbose=False)
+    try:
+        model = get_model()
+        results = model(img_array, conf=CONFIDENCE_THRESHOLD, verbose=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model inference failed: {str(e)}")
 
     detections = []
     for result in results:
@@ -547,8 +559,11 @@ async def predict_detailed(
     h, w = img_array.shape[:2]
 
     start_time = time.time()
-    model = get_model()
-    results = model(img_array, conf=CONFIDENCE_THRESHOLD, verbose=False)
+    try:
+        model = get_model()
+        results = model(img_array, conf=CONFIDENCE_THRESHOLD, verbose=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model inference failed: {str(e)}")
 
     detections = []
     detections_detailed = []
@@ -641,8 +656,11 @@ async def generate_report(
     h, w = img_array.shape[:2]
 
     start_time = time.time()
-    model = get_model()
-    results = model(img_array, conf=CONFIDENCE_THRESHOLD, verbose=False)
+    try:
+        model = get_model()
+        results = model(img_array, conf=CONFIDENCE_THRESHOLD, verbose=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model inference failed: {str(e)}")
 
     detections = []
     detections_detailed = []
