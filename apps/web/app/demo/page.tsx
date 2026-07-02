@@ -2,11 +2,43 @@
 
 import { useState, useCallback, useEffect } from "react";
 
+interface EngineeringInfo {
+  ru_name: string;
+  en_name: string;
+  category: string;
+  estimated_width_mm: number;
+  estimated_length_mm: number;
+  estimated_area_cm2: number;
+  width_cm: number;
+  length_cm: number;
+  normative_limit: string;
+  is_critical: boolean;
+  why_nn_detected: string;
+  causes: string[];
+  danger_level: string;
+  recommended_actions: string[];
+  norms: string[];
+  concrete_grades_affected: string;
+  rebar_impact: string;
+  measurement_methods: string[];
+  license_required: string;
+}
+
 interface Detection {
   class: string;
   confidence: number;
   bbox: { x: number; y: number; width: number; height: number };
   severity?: string;
+  engineering?: EngineeringInfo;
+}
+
+interface Summary {
+  total: number;
+  high: number;
+  medium: number;
+  low: number;
+  class_counts: Record<string, number>;
+  overall_condition: string;
 }
 
 interface AnalysisResult {
@@ -16,145 +48,56 @@ interface AnalysisResult {
   annotated_image: string;
   processing_time: number;
   model_version: string;
-  summary?: { total: number; high: number; medium: number; low: number };
+  detections_detailed?: Detection[];
+  summary?: Summary;
 }
 
-const DEFECT_KNOWLEDGE: Record<string, {
-  name: string;
-  type: string;
-  causes: string[];
-  whyNN: string;
-  norms: string;
-  limits: string;
-  danger: string;
-  actions: string[];
-  severityText: Record<string, string>;
-}> = {
-  Crack: {
-    name: "Crack / Treshchina",
-    type: "Mechanical defect — violation of material monolithicity",
-    causes: [
-      "Excess of tensile stresses over material strength",
-      "Uneven foundation settlement",
-      "Temperature-humidity deformations",
-      "Impact and vibration loads",
-      "Rebar corrosion expansion",
-      "Concrete shrinkage during curing",
-    ],
-    whyNN:
-      "The neural network (YOLOv8) detected this region because it exhibits characteristic visual patterns of cracks: " +
-      "dark linear discontinuities with high contrast against the background, narrow elongated shape, and typical orientation. " +
-      "The model was trained on thousands of annotated images of concrete and masonry cracks, learning to recognize " +
-      "their texture, geometry, and local gradient patterns. Higher confidence (>75%) means the visual signature closely " +
-      "matches known crack patterns in the training dataset.",
-    norms: "SP 13-102-2003, GOST 31937-2011, SNiP 2.03.01-84*",
-    limits:
-      "Maximum allowable crack width: normal conditions — 0.3 mm; aggressive environment — 0.1 mm",
-    danger:
-      "Cracks wider than 0.3 mm indicate potential loss of load-bearing capacity. Hairline cracks (<0.1 mm) require monitoring. " +
-      "Through-cracks (penetrating the full section) require immediate structural engineer assessment.",
-    actions: [
-      "1. Install crack gauges (mayaki) to monitor crack width dynamics over time.",
-      "2. Perform instrumental inspection with feeler gauge and crack meter.",
-      "3. If width > 0.3 mm: inject with cement slurry or epoxy resin.",
-      "4. For active (growing) cracks: perform structural calculation accounting for the defect.",
-      "5. Document in the building technical condition log.",
-    ],
-    severityText: {
-      high: "CRITICAL — immediate intervention required",
-      medium: "SIGNIFICANT — repair within 30 days",
-      low: "MINOR — schedule monitoring",
-    },
-  },
-  Spalling: {
-    name: "Spalling / Skol",
-    type: "Destructive defect — loss of surface material",
-    causes: [
-      "Rebar corrosion with expansion of rust products",
-      "Freeze-thaw cycling",
-      "Mechanical impact or abrasion",
-      "Concrete carbonation",
-      "Poor casting/compaction technology",
-    ],
-    whyNN:
-      "The model identified a spall because the region shows missing material, exposed aggregates or rebar, " +
-      "irregular surface geometry, and sharp edges contrasting with the surrounding intact surface. " +
-      "YOLOv8 learned these patterns from training images where spalls were annotated with bounding boxes.",
-    norms: "SP 13-102-2003, GOST 31937-2011, STO NOSTROY 2.7.64-2012",
-    limits: "Spalling depth > 20 mm or exposed rebar = critical defect",
-    danger:
-      "Exposed rebar undergoes active corrosion, reducing load-bearing capacity. If spalling area exceeds 10% " +
-      "of the element cross-section, immediate structural evaluation is required.",
-    actions: [
-      "1. Determine spalling depth and check for exposed rebar.",
-      "2. Remove loose material from the damaged zone.",
-      "3. Apply anti-corrosion treatment to exposed rebar.",
-      "4. Fill with repair mortar (Emaco, Sika MonoTop, Cemax).",
-      "5. Apply hydrophobic protective coating.",
-    ],
-    severityText: {
-      high: "CRITICAL — exposed rebar or deep spall",
-      medium: "SIGNIFICANT — shallow spall, no rebar exposed",
-      low: "MINOR — surface blemish",
-    },
-  },
-  default: {
-    name: "Unknown defect",
-    type: "Surface anomaly detected by neural network",
-    causes: ["Requires detailed instrumental inspection to determine root cause."],
-    whyNN:
-      "The neural network flagged this region because its visual features (texture, color, shape) deviate from " +
-      "normal surface patterns learned during training. The exact type may require expert confirmation.",
-    norms: "GOST 31937-2011, SP 13-102-2003",
-    limits: "Determined by project and applicable normative documents",
-    danger: "Requires additional inspection to assess hazard level.",
-    actions: [
-      "1. Conduct instrumental inspection by structural engineer.",
-      "2. Document with photographs and measurements.",
-    ],
-    severityText: {
-      high: "CRITICAL",
-      medium: "SIGNIFICANT",
-      low: "MINOR",
-    },
-  },
-};
-
-function getKnowledge(cls: string) {
-  return DEFECT_KNOWLEDGE[cls] || DEFECT_KNOWLEDGE.default;
+function severityLabel(s: string): string {
+  if (s === "high") return "КРИТИЧЕСКИЙ";
+  if (s === "medium") return "ЗНАЧИТЕЛЬНЫЙ";
+  return "НЕЗНАЧИТЕЛЬНЫЙ";
 }
 
-function severityLabel(conf: number): string {
-  if (conf >= 0.75) return "high";
-  if (conf >= 0.45) return "medium";
-  return "low";
+function severityColor(s: string): string {
+  if (s === "high") return "#ef4444";
+  if (s === "medium") return "#f59e0b";
+  return "#22c55e";
 }
 
-function severityColor(sev: string): string {
-  if (sev === "high") return "#ef4444";
-  if (sev === "medium") return "#f59e0b";
+function conditionLabel(c: string): string {
+  const m: Record<string, string> = {
+    INADMISSIBLE: "НЕДОПУСТИМОЕ",
+    LIMITED: "ОГРАНИЧЕННО ПРИГОДНОЕ",
+    SERVICEABLE: "ПРИГОДНОЕ",
+    NORMAL: "НОРМАЛЬНОЕ",
+  };
+  return m[c] || c;
+}
+
+function conditionColor(c: string): string {
+  if (c === "INADMISSIBLE") return "#ef4444";
+  if (c === "LIMITED") return "#f59e0b";
   return "#22c55e";
 }
 
 export default function DemoPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string>("");
+  const [preview, setPreview] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState("");
   const [pixelScale, setPixelScale] = useState("");
   const [environment, setEnvironment] = useState("atmospheric");
   const [aggression, setAggression] = useState("normal");
   const [projectName, setProjectName] = useState("");
   const [inspector, setInspector] = useState("");
   const [location, setLocation] = useState("");
+  const [selectedDefect, setSelectedDefect] = useState<number | null>(null);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFile(f);
-    setError("");
-    setResult(null);
+    setFile(f); setError(""); setResult(null); setSelectedDefect(null);
     const reader = new FileReader();
     reader.onloadend = () => setPreview(reader.result as string);
     reader.readAsDataURL(f);
@@ -167,9 +110,7 @@ export default function DemoPage() {
       if (items[i].type.startsWith("image/")) {
         const blob = items[i].getAsFile();
         if (blob) {
-          setFile(blob);
-          setError("");
-          setResult(null);
+          setFile(blob); setError(""); setResult(null); setSelectedDefect(null);
           const reader = new FileReader();
           reader.onloadend = () => setPreview(reader.result as string);
           reader.readAsDataURL(blob);
@@ -185,9 +126,7 @@ export default function DemoPage() {
 
   const analyze = async () => {
     if (!file) return;
-    setLoading(true);
-    setError("");
-    setResult(null);
+    setLoading(true); setError(""); setResult(null); setSelectedDefect(null);
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -195,22 +134,13 @@ export default function DemoPage() {
       if (pixelScale) params.set("pixel_scale_mm", pixelScale);
       if (environment) params.set("environment", environment);
       if (aggression) params.set("aggression", aggression);
-
-      const res = await fetch(`/api/ml/predict?${params.toString()}`, {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `Error ${res.status}`);
-      }
+      const res = await fetch(`/api/ml/predict?${params.toString()}`, { method: "POST", body: formData });
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.detail || `Error ${res.status}`); }
       const data: AnalysisResult = await res.json();
       setResult(data);
-    } catch (err: any) {
-      setError(err.message || "Analysis failed");
-    } finally {
-      setLoading(false);
-    }
+      if (data.detections_detailed && data.detections_detailed.length > 0) setSelectedDefect(0);
+    } catch (err: any) { setError(err.message || "Analysis failed"); }
+    finally { setLoading(false); }
   };
 
   const downloadReport = async () => {
@@ -226,74 +156,65 @@ export default function DemoPage() {
       if (projectName) params.set("project_name", projectName);
       if (inspector) params.set("inspector", inspector);
       if (location) params.set("location", location);
-
-      const res = await fetch(`/api/ml/report?${params.toString()}`, {
-        method: "POST",
-        body: formData,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail || `Error ${res.status}`);
-      }
+      const res = await fetch(`/api/ml/report?${params.toString()}`, { method: "POST", body: formData });
+      if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.detail || `Error ${res.status}`); }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url;
-      a.download = "InspectAI_Report.pdf";
-      a.click();
+      a.href = url; a.download = "InspectAI_Engineering_Report.pdf"; a.click();
       window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      setError(err.message || "Report generation failed");
-    } finally {
-      setLoading(false);
-    }
+    } catch (err: any) { setError(err.message || "Report generation failed"); }
+    finally { setLoading(false); }
   };
 
+  const detections = result?.detections_detailed || result?.detections || [];
+  const summary = result?.summary;
+
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: 24 }}>
-      <h1 style={{ fontSize: 28, marginBottom: 8 }}>InspectAI — Structural Defect Analysis</h1>
+    <div style={{ maxWidth: 1200, margin: "0 auto", padding: 24 }}>
+      <h1 style={{ fontSize: 28, marginBottom: 8 }}>InspectAI — Инженерный анализ дефектов</h1>
       <p style={{ color: "#94a3b8", marginBottom: 24 }}>
-        Upload a photo of a concrete or masonry structure. The AI will detect cracks, spalling, and other defects with detailed engineering assessment.
+        Загрузите фотографию бетонной или железобетонной конструкции. ИИ определит дефекты с полным инженерным анализом.
       </p>
 
       <div style={{ display: "grid", gap: 12, marginBottom: 24 }}>
         <label style={{ display: "block", padding: 16, border: "2px dashed #334155", borderRadius: 8, cursor: "pointer" }}>
           <input type="file" accept="image/*" onChange={onFileChange} style={{ display: "none" }} />
           <div style={{ textAlign: "center", color: "#94a3b8" }}>
-            {file ? file.name : "Click to upload or paste image (Ctrl+V / Cmd+V)"}
+            {file ? file.name : "Нажмите для загрузки или вставьте из буфера (Ctrl+V / Cmd+V)"}
           </div>
         </label>
 
-        {preview && (
+        {preview && !result && (
           <img src={preview} alt="preview" style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid #334155" }} />
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-          <input placeholder="Pixel scale (mm/px)" value={pixelScale} onChange={(e) => setPixelScale(e.target.value)} style={inputStyle} />
+          <input placeholder="Масштаб (мм/px)" value={pixelScale} onChange={(e) => setPixelScale(e.target.value)} style={inputStyle} />
           <select value={environment} onChange={(e) => setEnvironment(e.target.value)} style={inputStyle}>
-            <option value="atmospheric">Atmospheric</option>
-            <option value="aggressive">Aggressive</option>
-            <option value="indoor">Indoor</option>
+            <option value="atmospheric">Атмосферная среда</option>
+            <option value="aggressive">Агрессивная среда</option>
+            <option value="indoor">Закрытое помещение</option>
           </select>
           <select value={aggression} onChange={(e) => setAggression(e.target.value)} style={inputStyle}>
-            <option value="normal">Normal</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+            <option value="normal">Нормальная</option>
+            <option value="medium">Средняя</option>
+            <option value="high">Высокая</option>
           </select>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-          <input placeholder="Project name" value={projectName} onChange={(e) => setProjectName(e.target.value)} style={inputStyle} />
-          <input placeholder="Inspector name" value={inspector} onChange={(e) => setInspector(e.target.value)} style={inputStyle} />
-          <input placeholder="Location / address" value={location} onChange={(e) => setLocation(e.target.value)} style={inputStyle} />
+          <input placeholder="Объект" value={projectName} onChange={(e) => setProjectName(e.target.value)} style={inputStyle} />
+          <input placeholder="Обследовал" value={inspector} onChange={(e) => setInspector(e.target.value)} style={inputStyle} />
+          <input placeholder="Адрес" value={location} onChange={(e) => setLocation(e.target.value)} style={inputStyle} />
         </div>
 
         <div style={{ display: "flex", gap: 12 }}>
           <button onClick={analyze} disabled={!file || loading} style={{ ...btnStyle, opacity: !file || loading ? 0.6 : 1 }}>
-            {loading ? "Analyzing..." : "Analyze Image"}
+            {loading ? "Анализ..." : "Анализировать"}
           </button>
           <button onClick={downloadReport} disabled={!file || loading} style={{ ...btnStyle, background: "#0ea5e9", opacity: !file || loading ? 0.6 : 1 }}>
-            {loading ? "Generating PDF..." : "Download PDF Report"}
+            {loading ? "Генерация PDF..." : "Скачать PDF отчёт"}
           </button>
         </div>
       </div>
@@ -302,125 +223,228 @@ export default function DemoPage() {
         <div style={{ padding: 12, background: "#450a0a", borderRadius: 8, color: "#fca5a5", marginBottom: 24 }}>{error}</div>
       )}
 
-      {result && <ResultsPanel result={result} />}
+      {result && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          {/* Left: image + summary + defect list */}
+          <div style={{ display: "grid", gap: 16 }}>
+            {result.annotated_image && (
+              <div style={{ padding: 12, background: "#1e293b", borderRadius: 8 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 8 }}>Результат детекции</h3>
+                <img
+                  src={`data:image/jpeg;base64,${result.annotated_image}`}
+                  alt="annotated"
+                  style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid #334155" }}
+                />
+                <p style={{ color: "#64748b", fontSize: 12, marginTop: 8 }}>
+                  {result.image_width} × {result.image_height} px | {result.processing_time.toFixed(2)}с | {result.model_version}
+                </p>
+              </div>
+            )}
+
+            {summary && (
+              <div style={{ padding: 16, background: "#1e293b", borderRadius: 8 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 12 }}>Сводка</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                  <StatBox label="Всего" value={summary.total} />
+                  <StatBox label="Критич." value={summary.high} color="#ef4444" />
+                  <StatBox label="Значит." value={summary.medium} color="#f59e0b" />
+                  <StatBox label="Незнач." value={summary.low} color="#22c55e" />
+                </div>
+                <div style={{ marginTop: 12, padding: 10, borderRadius: 6, background: conditionColor(summary.overall_condition) + "22", borderLeft: `4px solid ${conditionColor(summary.overall_condition)}` }}>
+                  <span style={{ color: conditionColor(summary.overall_condition), fontWeight: 700, fontSize: 14 }}>
+                    Общее состояние: {conditionLabel(summary.overall_condition)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {detections.length > 0 && (
+              <div style={{ padding: 12, background: "#1e293b", borderRadius: 8 }}>
+                <h3 style={{ marginTop: 0, marginBottom: 8 }}>Обнаруженные дефекты</h3>
+                {detections.map((det, idx) => {
+                  const eng = det.engineering;
+                  const sev = det.severity || "low";
+                  const color = severityColor(sev);
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => setSelectedDefect(idx)}
+                      style={{
+                        padding: 10, marginBottom: 6, borderRadius: 6, cursor: "pointer",
+                        background: selectedDefect === idx ? "#334155" : "#0f172a",
+                        borderLeft: `4px solid ${color}`,
+                        transition: "background 0.15s",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontWeight: 700, fontSize: 14 }}>
+                          #{idx + 1} {eng?.ru_name || det.class}
+                        </span>
+                        <span style={{ padding: "2px 8px", borderRadius: 999, background: color, color: "#fff", fontSize: 11, fontWeight: 700 }}>
+                          {severityLabel(sev)} {(det.confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      {eng && (
+                        <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>
+                          Ширина: {eng.estimated_width_mm.toFixed(2)} мм ({eng.width_cm.toFixed(2)} см) | Длина: {eng.estimated_length_mm.toFixed(2)} мм | Площадь: {eng.estimated_area_cm2.toFixed(2)} см²
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {detections.length === 0 && (
+              <div style={{ padding: 16, background: "#1e293b", borderRadius: 8, color: "#22c55e" }}>
+                Дефекты не обнаружены. Конструкция в нормальном состоянии по визуальным признакам.
+              </div>
+            )}
+          </div>
+
+          {/* Right: detailed engineering info */}
+          <div>
+            {selectedDefect !== null && detections[selectedDefect] ? (
+              <DefectDetails det={detections[selectedDefect]} index={selectedDefect + 1} />
+            ) : (
+              <div style={{ padding: 16, background: "#1e293b", borderRadius: 8, color: "#94a3b8" }}>
+                Выберите дефект слева для просмотра детальной инженерной информации.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div style={{ marginTop: 24, padding: 16, background: "#1e293b", borderRadius: 8, color: "#94a3b8", fontSize: 13 }}>
+          <strong style={{ color: "#fca5a5" }}>Дисклеймер:</strong> Предварительная визуальная оценка автоматизированной ИИ-системой (YOLOv8).
+          Не заменяет полного инструментального обследования по ГОСТ 31937-2011 и СП 13-102-2003, проводимого аттестованной лабораторией.
+        </div>
+      )}
     </div>
   );
 }
 
-function ResultsPanel({ result }: { result: AnalysisResult }) {
-  const summary = result.summary || { total: 0, high: 0, medium: 0, low: 0 };
-  return (
-    <div style={{ display: "grid", gap: 24 }}>
+function DefectDetails({ det, index }: { det: Detection; index: number }) {
+  const eng = det.engineering;
+  const sev = det.severity || "low";
+  const color = severityColor(sev);
+
+  if (!eng) {
+    return (
       <div style={{ padding: 16, background: "#1e293b", borderRadius: 8 }}>
-        <h2 style={{ marginTop: 0 }}>Analysis Results</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 12 }}>
-          <StatBox label="Total defects" value={summary.total} />
-          <StatBox label="Critical" value={summary.high} color="#ef4444" />
-          <StatBox label="Significant" value={summary.medium} color="#f59e0b" />
-          <StatBox label="Minor" value={summary.low} color="#22c55e" />
-        </div>
-        <p style={{ color: "#94a3b8", fontSize: 14 }}>
-          Image size: {result.image_width} × {result.image_height} px | Processing time: {result.processing_time.toFixed(2)}s | Model: {result.model_version}
+        <h3 style={{ marginTop: 0 }}>#{index} {det.class}</h3>
+        <p style={{ color: "#94a3b8" }}>Инженерный анализ недоступен.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: 16, background: "#1e293b", borderRadius: 8, borderLeft: `4px solid ${color}`, maxHeight: "80vh", overflowY: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <h3 style={{ margin: 0, fontSize: 18 }}>#{index} {eng.ru_name}</h3>
+        <span style={{ padding: "4px 10px", borderRadius: 999, background: color, color: "#fff", fontSize: 12, fontWeight: 700 }}>
+          {severityLabel(sev)} — {(det.confidence * 100).toFixed(0)}%
+        </span>
+      </div>
+
+      <Section title="Категория"><p style={pStyle}>{eng.category}</p></Section>
+
+      <Section title="Геометрические параметры">
+        <ParamTable params={[
+          ["Ширина", `${eng.estimated_width_mm.toFixed(2)} мм`, `${eng.width_cm.toFixed(2)} см`],
+          ["Длина", `${eng.estimated_length_mm.toFixed(2)} мм`, `${eng.length_cm.toFixed(2)} см`],
+          ["Площадь", `${eng.estimated_area_cm2.toFixed(2)} см²`, ""],
+          ["Позиция (X, Y)", `${Math.round(det.bbox.x)}, ${Math.round(det.bbox.y)} px`, ""],
+          ["Размер бокса", `${Math.round(det.bbox.width)} × ${Math.round(det.bbox.height)} px`, ""],
+        ]} />
+      </Section>
+
+      <Section title="Нормативные пределы">
+        <p style={pStyle}>{eng.normative_limit}</p>
+        <p style={{ ...pStyle, color: eng.is_critical ? "#ef4444" : "#22c55e", fontWeight: 700 }}>
+          {eng.is_critical ? "⚠ ПРЕВЫШЕНО — требуется немедленное вмешательство" : "✓ В пределах допустимого"}
         </p>
-        {result.annotated_image && (
-          <img
-            src={`data:image/jpeg;base64,${result.annotated_image}`}
-            alt="annotated"
-            style={{ maxWidth: "100%", borderRadius: 8, border: "1px solid #334155", marginTop: 12 }}
-          />
-        )}
-      </div>
+      </Section>
 
-      <div>
-        <h2>Detected Defects — Detailed Engineering Analysis</h2>
-        {result.detections.length === 0 && (
-          <p style={{ color: "#94a3b8" }}>No defects detected. The structure appears to be in normal condition per GOST 31937-2011.</p>
-        )}
-        {result.detections.map((det, idx) => (
-          <DefectCard key={idx} index={idx + 1} detection={det} />
-        ))}
-      </div>
+      <Section title="Почему ИИ обнаружил этот дефект">
+        <p style={pStyle}>{eng.why_nn_detected}</p>
+      </Section>
 
-      <div style={{ padding: 16, background: "#1e293b", borderRadius: 8, color: "#94a3b8", fontSize: 14 }}>
-        <strong style={{ color: "#fca5a5" }}>Disclaimer:</strong> This is a preliminary visual assessment generated by an automated AI system (YOLOv8). 
-        It does <strong>not</strong> replace a full instrumental engineering inspection performed by a licensed structural engineer per GOST 31937-2011 and SP 13-102-2003.
-      </div>
+      <Section title="Возможные причины">
+        <ul style={{ margin: 0, paddingLeft: 18, color: "#94a3b8" }}>
+          {eng.causes.map((c: string, i: number) => <li key={i} style={{ marginBottom: 4, fontSize: 13 }}>{c}</li>)}
+        </ul>
+      </Section>
+
+      <Section title="Оценка опасности" color={color}>
+        <p style={{ ...pStyle, color, fontWeight: 700 }}>{eng.danger_level}</p>
+      </Section>
+
+      <Section title="Влияние на классы бетона">
+        <p style={pStyle}>{eng.concrete_grades_affected}</p>
+      </Section>
+
+      <Section title="Влияние на арматуру">
+        <p style={pStyle}>{eng.rebar_impact}</p>
+      </Section>
+
+      <Section title="Рекомендуемые действия">
+        <ol style={{ margin: 0, paddingLeft: 18, color: "#94a3b8" }}>
+          {eng.recommended_actions.map((a: string, i: number) => <li key={i} style={{ marginBottom: 4, fontSize: 13 }}>{a}</li>)}
+        </ol>
+      </Section>
+
+      <Section title="Применимые нормативы">
+        {eng.norms.map((n: string, i: number) => <div key={i} style={{ ...pStyle, fontSize: 13 }}>• {n}</div>)}
+      </Section>
+
+      <Section title="Методы измерения">
+        {eng.measurement_methods.map((m: string, i: number) => <div key={i} style={{ ...pStyle, fontSize: 13 }}>• {m}</div>)}
+      </Section>
+
+      <Section title="Требования к квалификации">
+        <p style={pStyle}>{eng.license_required}</p>
+      </Section>
     </div>
+  );
+}
+
+function Section({ title, children, color }: { title: string; children: React.ReactNode; color?: string }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontWeight: 700, color: color || "#cbd5e1", fontSize: 13, marginBottom: 4 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function ParamTable({ params }: { params: [string, string, string][] }) {
+  return (
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+      <tbody>
+        {params.map(([label, val1, val2], i) => (
+          <tr key={i} style={{ borderBottom: "1px solid #334155" }}>
+            <td style={{ padding: "6px 8px", color: "#64748b", width: "35%" }}>{label}</td>
+            <td style={{ padding: "6px 8px", color: "#e2e8f0" }}>{val1}</td>
+            <td style={{ padding: "6px 8px", color: "#94a3b8", fontSize: 12 }}>{val2}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
 function StatBox({ label, value, color }: { label: string; value: number; color?: string }) {
   return (
-    <div style={{ padding: 12, background: "#0f172a", borderRadius: 8, textAlign: "center" }}>
-      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: color || "#e2e8f0" }}>{value}</div>
+    <div style={{ padding: 10, background: "#0f172a", borderRadius: 6, textAlign: "center" }}>
+      <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 22, fontWeight: 700, color: color || "#e2e8f0" }}>{value}</div>
     </div>
   );
 }
 
-function DefectCard({ index, detection }: { index: number; detection: Detection }) {
-  const sev = detection.severity || severityLabel(detection.confidence);
-  const knowledge = getKnowledge(detection.class);
-  const color = severityColor(sev);
-
-  return (
-    <div style={{ marginBottom: 20, padding: 16, background: "#1e293b", borderRadius: 8, borderLeft: `4px solid ${color}` }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <h3 style={{ margin: 0 }}>
-          #{index} {knowledge.name}
-        </h3>
-        <span style={{ padding: "4px 10px", borderRadius: 999, background: color, color: "#fff", fontSize: 12, fontWeight: 700 }}>
-          {knowledge.severityText[sev] || sev.toUpperCase()} — {(detection.confidence * 100).toFixed(0)}%
-        </span>
-      </div>
-
-      <div style={{ display: "grid", gap: 12 }}>
-        <InfoRow label="Defect Type" value={knowledge.type} />
-        <InfoRow label="Position (top-left)" value={`x = ${Math.round(detection.bbox.x)} px,  y = ${Math.round(detection.bbox.y)} px`} />
-        <InfoRow label="Bounding Box Size" value={`${Math.round(detection.bbox.width)} × ${Math.round(detection.bbox.height)} px`} />
-        <InfoRow label="Applicable Standards" value={knowledge.norms} />
-        <InfoRow label="Normative Limits" value={knowledge.limits} />
-
-        <div>
-          <div style={{ fontWeight: 700, color: "#cbd5e1", marginBottom: 4 }}>Why the Neural Network Detected This</div>
-          <p style={{ margin: 0, color: "#94a3b8", lineHeight: 1.6 }}>{knowledge.whyNN}</p>
-        </div>
-
-        <div>
-          <div style={{ fontWeight: 700, color: "#cbd5e1", marginBottom: 4 }}>Probable Causes</div>
-          <ul style={{ margin: 0, paddingLeft: 18, color: "#94a3b8" }}>
-            {knowledge.causes.map((c, i) => (
-              <li key={i} style={{ marginBottom: 4 }}>{c}</li>
-            ))}
-          </ul>
-        </div>
-
-        <div>
-          <div style={{ fontWeight: 700, color: "#fca5a5", marginBottom: 4 }}>Hazard Assessment</div>
-          <p style={{ margin: 0, color: "#94a3b8", lineHeight: 1.6 }}>{knowledge.danger}</p>
-        </div>
-
-        <div>
-          <div style={{ fontWeight: 700, color: "#86efac", marginBottom: 4 }}>Recommended Actions</div>
-          <ul style={{ margin: 0, paddingLeft: 18, color: "#94a3b8" }}>
-            {knowledge.actions.map((a, i) => (
-              <li key={i} style={{ marginBottom: 4 }}>{a}</li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-      <span style={{ color: "#64748b", minWidth: 160 }}>{label}:</span>
-      <span style={{ color: "#e2e8f0" }}>{value}</span>
-    </div>
-  );
-}
+const pStyle: React.CSSProperties = { margin: 0, color: "#94a3b8", lineHeight: 1.5, fontSize: 13 };
 
 const inputStyle: React.CSSProperties = {
   padding: "10px 12px",
