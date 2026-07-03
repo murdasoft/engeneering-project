@@ -92,6 +92,11 @@ export default function DemoPage() {
   const [projectName, setProjectName] = useState("");
   const [inspector, setInspector] = useState("");
   const [location, setLocation] = useState("");
+  const [structureType, setStructureType] = useState("wall");
+  const [concreteGrade, setConcreteGrade] = useState("B25");
+  const [rebarClass, setRebarClass] = useState("A400");
+  const [structureAge, setStructureAge] = useState("");
+  const [protectiveLayer, setProtectiveLayer] = useState("");
   const [selectedDefect, setSelectedDefect] = useState<number | null>(null);
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -134,6 +139,11 @@ export default function DemoPage() {
       if (pixelScale) params.set("pixel_scale_mm", pixelScale);
       if (environment) params.set("environment", environment);
       if (aggression) params.set("aggression", aggression);
+      if (structureType) params.set("structure_type", structureType);
+      if (concreteGrade) params.set("concrete_grade", concreteGrade);
+      if (rebarClass) params.set("rebar_class", rebarClass);
+      if (structureAge) params.set("structure_age", structureAge);
+      if (protectiveLayer) params.set("protective_layer_mm", protectiveLayer);
       const res = await fetch(`/api/ml/predict?${params.toString()}`, { method: "POST", body: formData });
       if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.detail || `Error ${res.status}`); }
       const data: AnalysisResult = await res.json();
@@ -156,6 +166,11 @@ export default function DemoPage() {
       if (projectName) params.set("project_name", projectName);
       if (inspector) params.set("inspector", inspector);
       if (location) params.set("location", location);
+      if (structureType) params.set("structure_type", structureType);
+      if (concreteGrade) params.set("concrete_grade", concreteGrade);
+      if (rebarClass) params.set("rebar_class", rebarClass);
+      if (structureAge) params.set("structure_age", structureAge);
+      if (protectiveLayer) params.set("protective_layer_mm", protectiveLayer);
       const res = await fetch(`/api/ml/report?${params.toString()}`, { method: "POST", body: formData });
       if (!res.ok) { const data = await res.json().catch(() => ({})); throw new Error(data.detail || `Error ${res.status}`); }
       const blob = await res.blob();
@@ -207,6 +222,41 @@ export default function DemoPage() {
           <input placeholder="Объект" value={projectName} onChange={(e) => setProjectName(e.target.value)} style={inputStyle} />
           <input placeholder="Обследовал" value={inspector} onChange={(e) => setInspector(e.target.value)} style={inputStyle} />
           <input placeholder="Адрес" value={location} onChange={(e) => setLocation(e.target.value)} style={inputStyle} />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+          <select value={structureType} onChange={(e) => setStructureType(e.target.value)} style={inputStyle}>
+            <option value="wall">Стена</option>
+            <option value="column">Колонна</option>
+            <option value="beam">Балка</option>
+            <option value="slab">Плита перекрытия</option>
+            <option value="foundation">Фундамент</option>
+            <option value="other">Прочее</option>
+          </select>
+          <select value={concreteGrade} onChange={(e) => setConcreteGrade(e.target.value)} style={inputStyle}>
+            <option value="B15">B15 (М200)</option>
+            <option value="B20">B20 (М250)</option>
+            <option value="B25">B25 (М350)</option>
+            <option value="B30">B30 (М400)</option>
+            <option value="B35">B35 (М450)</option>
+            <option value="B40">B40 (М500)</option>
+            <option value="B45">B45 (М550)</option>
+            <option value="B50">B50 (М600)</option>
+            <option value="unknown">Неизвестна</option>
+          </select>
+          <select value={rebarClass} onChange={(e) => setRebarClass(e.target.value)} style={inputStyle}>
+            <option value="A240">A240 (I класс)</option>
+            <option value="A300">A300 (II класс)</option>
+            <option value="A400">A400 (III класс)</option>
+            <option value="A500">A500 (IV класс)</option>
+            <option value="A600">A600 (V класс)</option>
+            <option value="unknown">Неизвестен</option>
+          </select>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <input placeholder="Возраст конструкции (лет)" value={structureAge} onChange={(e) => setStructureAge(e.target.value)} style={inputStyle} />
+          <input placeholder="Толщина защитного слоя (мм)" value={protectiveLayer} onChange={(e) => setProtectiveLayer(e.target.value)} style={inputStyle} />
         </div>
 
         <div style={{ display: "flex", gap: 12 }}>

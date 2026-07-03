@@ -51,31 +51,17 @@ async def send_chat_action(chat_id: int, action: str = "typing") -> dict:
 
 async def send_document(
     chat_id: int,
-    document: str | bytes,
-    filename: str = "document.pdf",
-    mime_type: str = "application/pdf",
+    document: str,
     caption: str | None = None,
 ) -> dict:
     """
     Send a document (PDF).
-    Accepts a local file path, raw bytes, or a Telegram file_id.
+    Accepts a local file path or a Telegram file_id.
     """
     url = f"{_BASE_URL}/sendDocument"
     params: dict[str, Any] = {"chat_id": chat_id}
     if caption:
         params["caption"] = caption
-
-    # Raw bytes → multipart upload
-    if isinstance(document, (bytes, bytearray)):
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                url,
-                data=params,
-                files={"document": (filename, document, mime_type)},
-            )
-            if not resp.is_success:
-                logger.error("sendDocument error: %s %s", resp.status_code, resp.text)
-            return resp.json()
 
     # Local file path → multipart upload
     if Path(document).is_file():

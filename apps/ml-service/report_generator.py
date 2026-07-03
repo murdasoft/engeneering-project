@@ -313,12 +313,20 @@ def method_section(story, meta):
 
 def object_section(story, meta):
     story.append(Paragraph("4. ОПИСАНИЕ ОБЪЕКТА", S_H1))
+    structure_type_map = {
+        "wall": "Стена", "column": "Колонна", "beam": "Балка",
+        "slab": "Плита перекрытия", "foundation": "Фундамент", "other": "Прочее"
+    }
     obj_data = [
         ["Наименование объекта:", meta.get("project_name", "Не указан")],
         ["Адрес / расположение:", meta.get("location", "Не указан")],
         ["Дата обследования:", datetime.now().strftime("%d.%m.%Y")],
         ["Исполнитель:", meta.get("inspector", "InspectAI Automated System")],
-        ["Тип конструкции:", "Бетонная / железобетонная (предположительно)"],
+        ["Тип конструкции:", structure_type_map.get(meta.get("structure_type"), "Бетонная / железобетонная")],
+        ["Класс бетона:", meta.get("concrete_grade", "Не указан")],
+        ["Класс арматуры:", meta.get("rebar_class", "Не указан")],
+        ["Возраст конструкции:", meta.get("structure_age", "Не указан") + " лет" if meta.get("structure_age") else "Не указан"],
+        ["Защитный слой:", str(meta.get("protective_layer_mm", "Не указан")) + " мм" if meta.get("protective_layer_mm") else "Не указан"],
         ["Среда эксплуатации:", meta.get("environment", "atmospheric")],
         ["Уровень агрессивности:", meta.get("aggression", "normal")],
     ]
@@ -937,6 +945,11 @@ def generate_pdf_report(
     environment: str = "atmospheric",
     aggression: str = "normal",
     pixel_scale_mm: float = None,
+    structure_type: str = None,
+    concrete_grade: str = None,
+    rebar_class: str = None,
+    structure_age: str = None,
+    protective_layer_mm: float = None,
 ) -> bytes:
     """Generate comprehensive engineering PDF report."""
     buf = io.BytesIO()
@@ -958,6 +971,11 @@ def generate_pdf_report(
         "environment": environment,
         "aggression": aggression,
         "pixel_scale_mm": pixel_scale_mm,
+        "structure_type": structure_type,
+        "concrete_grade": concrete_grade,
+        "rebar_class": rebar_class,
+        "structure_age": structure_age,
+        "protective_layer_mm": protective_layer_mm,
         "image_width": image_width,
         "image_height": image_height,
         "processing_time": processing_time,

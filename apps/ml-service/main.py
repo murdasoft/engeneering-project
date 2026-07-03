@@ -542,6 +542,11 @@ async def predict_detailed(
     pixel_scale_mm: Optional[float] = Query(None),
     environment: str = Query("atmospheric"),
     aggression: str = Query("normal"),
+    structure_type: Optional[str] = Query(None),
+    concrete_grade: Optional[str] = Query(None),
+    rebar_class: Optional[str] = Query(None),
+    structure_age: Optional[str] = Query(None),
+    protective_layer_mm: Optional[float] = Query(None),
 ):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
@@ -639,6 +644,11 @@ async def generate_report(
     pixel_scale_mm: Optional[float] = Query(None),
     environment: str = Query("atmospheric"),
     aggression: str = Query("normal"),
+    structure_type: Optional[str] = Query(None),
+    concrete_grade: Optional[str] = Query(None),
+    rebar_class: Optional[str] = Query(None),
+    structure_age: Optional[str] = Query(None),
+    protective_layer_mm: Optional[float] = Query(None),
 ):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
@@ -713,6 +723,11 @@ async def generate_report(
             environment=environment,
             aggression=aggression,
             pixel_scale_mm=pixel_scale_mm,
+            structure_type=structure_type,
+            concrete_grade=concrete_grade,
+            rebar_class=rebar_class,
+            structure_age=structure_age,
+            protective_layer_mm=protective_layer_mm,
         )
         return Response(
             content=pdf_bytes,
