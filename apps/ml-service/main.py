@@ -10,6 +10,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends, Q
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
+from huggingface_hub import hf_hub_download, login as hf_login
 
 app = FastAPI(
     title="InspectAI ML Service",
@@ -25,8 +26,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-HF_MODEL = os.getenv("HF_MODEL", "keremberke/yolov8s-surface-crack-detection")
-CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.25"))
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+HF_MODEL = os.getenv("HF_MODEL", "wjdqlscho/Crack_YOLO_Segmentation_model")
+HF_MODEL_FILE = os.getenv("HF_MODEL_FILE", "best.pt")
+HF_MODEL_FALLBACK = os.getenv("HF_MODEL_FALLBACK", "hyunon/crack-yolov8")
+HF_MODEL_FALLBACK_FILE = os.getenv("HF_MODEL_FALLBACK_FILE", "crack.pt")
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.15"))
+
+# Authenticate with HuggingFace if token is available
+if HF_TOKEN:
+    hf_login(token=HF_TOKEN)
 API_KEY = os.getenv("ML_API_KEY", "")
 
 
@@ -34,25 +43,204 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None)):
     return True
 
 
-_model = None
+_models = {}
 
 
-def get_model():
-    global _model
-    if _model is None:
+def _download_model(repo_id: str, filename: str) -> str:
+    """Download model from HuggingFace with token support."""
+    try:
+        return hf_hub_download(repo_id=repo_id, filename=filename, token=HF_TOKEN or None)
+    except Exception:
+        return ""
+
+
+def get_model(model_name: str = "primary"):
+    global _models
+    if model_name not in _models:
         from ultralytics import YOLO
-        # Try local model files first, then HF model
-        for path in ["best.pt", "models/best.pt"]:
-            if os.path.exists(path):
-                _model = YOLO(path)
-                return _model
-        # Try HF model
+        import torch
+        _orig_load = torch.load
+        torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
         try:
-            _model = YOLO(HF_MODEL)
-        except Exception as e:
-            # Fallback to yolov8n pretrained
-            _model = YOLO("yolov8n.pt")
-    return _model
+            if model_name == "primary":
+                for path in ["best.pt", "models/best.pt"]:
+                    if os.path.exists(path):
+                        _models[model_name] = YOLO(path)
+                        return _models[model_name]
+                local_path = _download_model(HF_MODEL, HF_MODEL_FILE)
+                if local_path and os.path.exists(local_path):
+                    _models[model_name] = YOLO(local_path)
+                else:
+                    _models[model_name] = YOLO("yolov8n.pt")
+            elif model_name == "fallback":
+                local_path = _download_model(HF_MODEL_FALLBACK, HF_MODEL_FALLBACK_FILE)
+                if local_path and os.path.exists(local_path):
+                    _models[model_name] = YOLO(local_path)
+                else:
+                    _models[model_name] = None
+        finally:
+            torch.load = _orig_load
+    return _models.get(model_name)
+
+
+def _is_crack_like(class_name: str) -> bool:
+    """Accept only defect/crack-like classes, reject background/non-defect labels."""
+    name = (class_name or "").lower()
+    allowed = {"crack", "cracks", "fissure", "fracture", "split", "break", "pothole", "damage", "defect", "hole"}
+    rejected = {"background", "bg", "wall", "concrete", "surface", "normal", "good", "ok", "none", "no crack"}
+    if name in rejected or any(r in name for r in rejected):
+        return False
+    return name in allowed or any(a in name for a in allowed)
+
+
+def _aspect_ratio_ok(box: list) -> bool:
+    """Cracks are elongated: one dimension must be at least 1.5x the other."""
+    w = box[2] - box[0]
+    h = box[3] - box[1]
+    if w <= 0 or h <= 0:
+        return False
+    min_dim = min(w, h)
+    max_dim = max(w, h)
+    return (min_dim / max_dim) <= 0.67 and max_dim >= 20
+
+
+def _box_area(box: list) -> float:
+    return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
+
+
+def _center_distance(box_a: list, box_b: list) -> float:
+    cx_a = (box_a[0] + box_a[2]) / 2
+    cy_a = (box_a[1] + box_a[3]) / 2
+    cx_b = (box_b[0] + box_b[2]) / 2
+    cy_b = (box_b[1] + box_b[3]) / 2
+    return math.hypot(cx_a - cx_b, cy_a - cy_b)
+
+
+def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD):
+    """Run models, filter noise, and merge detections with aggressive NMS."""
+    all_boxes = []
+    all_confs = []
+    all_class_names = []
+
+    # Run primary model first; only use fallback if primary finds very few real cracks.
+    model_order = ["primary"]
+    primary_detections = []
+
+    for model_name in model_order:
+        model = get_model(model_name)
+        if model is None:
+            continue
+        try:
+            results = model(img_array, conf=threshold, verbose=False)
+            for result in results:
+                if result.boxes is None:
+                    continue
+                boxes = result.boxes
+                for i in range(len(boxes)):
+                    cls_name = get_class_name(model, int(boxes.cls[i].item()))
+                    conf = float(boxes.conf[i].item())
+                    xyxy = boxes.xyxy[i].cpu().numpy()
+                    x1, y1, x2, y2 = map(float, xyxy)
+                    box = [x1, y1, x2, y2]
+
+                    # Reject non-defect classes and background
+                    if not _is_crack_like(cls_name):
+                        continue
+                    # Reject square/blob-like boxes that are not cracks
+                    if not _aspect_ratio_ok(box):
+                        continue
+                    # Reject tiny boxes
+                    if _box_area(box) < 400:
+                        continue
+
+                    primary_detections.append((box, conf, cls_name))
+        except Exception:
+            continue
+
+    # If primary found enough real cracks, don't use noisy fallback.
+    if len(primary_detections) >= 3:
+        all_entries = primary_detections
+    else:
+        # Add fallback detections
+        fallback_detections = []
+        model = get_model("fallback")
+        if model is not None:
+            try:
+                results = model(img_array, conf=threshold, verbose=False)
+                for result in results:
+                    if result.boxes is None:
+                        continue
+                    boxes = result.boxes
+                    for i in range(len(boxes)):
+                        cls_name = get_class_name(model, int(boxes.cls[i].item()))
+                        conf = float(boxes.conf[i].item())
+                        xyxy = boxes.xyxy[i].cpu().numpy()
+                        x1, y1, x2, y2 = map(float, xyxy)
+                        box = [x1, y1, x2, y2]
+
+                        if not _is_crack_like(cls_name):
+                            continue
+                        if not _aspect_ratio_ok(box):
+                            continue
+                        if _box_area(box) < 400:
+                            continue
+                        fallback_detections.append((box, conf, cls_name))
+            except Exception:
+                pass
+        all_entries = primary_detections + fallback_detections
+
+    if len(all_entries) == 0:
+        return [], [], [], []
+
+    # Sort by confidence descending for greedy NMS
+    all_entries.sort(key=lambda x: x[1], reverse=True)
+    all_boxes = [e[0] for e in all_entries]
+    all_confs = [e[1] for e in all_entries]
+    all_class_names = [e[2] for e in all_entries]
+
+    # Greedy NMS with IoU and center-distance merge
+    suppressed = [False] * len(all_boxes)
+    iou_thresh = 0.35
+    center_thresh = 30.0
+
+    for i in range(len(all_boxes)):
+        if suppressed[i]:
+            continue
+        for j in range(i + 1, len(all_boxes)):
+            if suppressed[j]:
+                continue
+            iou = compute_iou(all_boxes[i], all_boxes[j])
+            c_dist = _center_distance(all_boxes[i], all_boxes[j])
+            if iou > iou_thresh or c_dist < center_thresh:
+                suppressed[j] = True
+
+    merged = []
+    for i in range(len(all_boxes)):
+        if not suppressed[i]:
+            merged.append({
+                "bbox": all_boxes[i],
+                "confidence": all_confs[i],
+                "class_name": all_class_names[i],
+            })
+
+    # Sort by confidence descending
+    merged.sort(key=lambda x: x["confidence"], reverse=True)
+    boxes_out = [m["bbox"] for m in merged]
+    confs_out = [m["confidence"] for m in merged]
+    names_out = [m["class_name"] for m in merged]
+    return boxes_out, confs_out, names_out, [0] * len(merged)
+
+
+def compute_iou(box_a, box_b):
+    x1 = max(box_a[0], box_b[0])
+    y1 = max(box_a[1], box_b[1])
+    x2 = min(box_a[2], box_b[2])
+    y2 = min(box_a[3], box_b[3])
+    inter = max(0, x2 - x1) * max(0, y2 - y1)
+    area_a = (box_a[2] - box_a[0]) * (box_a[3] - box_a[1])
+    area_b = (box_b[2] - box_b[0]) * (box_b[3] - box_b[1])
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0
 
 CLASS_COLORS = {
     "crack": (196, 84, 61),
@@ -467,7 +655,7 @@ class DetailedPredictionResponse(PredictionResponse):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "2.0.0", "model": HF_MODEL}
+    return {"status": "ok", "version": "3.0.0", "models": [HF_MODEL, HF_MODEL_FALLBACK]}
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -492,30 +680,25 @@ async def predict(
 
     start_time = time.time()
     try:
-        model = get_model()
-        results = model(img_array, conf=CONFIDENCE_THRESHOLD, verbose=False)
+        all_boxes, all_confs, all_names, _ = run_ensemble(img_array, CONFIDENCE_THRESHOLD)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model inference failed: {str(e)}")
 
     detections = []
-    for result in results:
-        boxes = result.boxes
-        for i in range(len(boxes)):
-            cls_id = int(boxes.cls[i].item())
-            conf = float(boxes.conf[i].item())
-            xyxy = boxes.xyxy[i].cpu().numpy()
-            x1, y1, x2, y2 = xyxy
-            class_name = get_class_name(model, cls_id)
-            detections.append({
-                "class": class_name,
-                "confidence": conf,
-                "bbox": {
-                    "x": float(x1),
-                    "y": float(y1),
-                    "width": float(x2 - x1),
-                    "height": float(y2 - y1),
-                },
-            })
+    for i in range(len(all_boxes)):
+        conf = all_confs[i]
+        x1, y1, x2, y2 = all_boxes[i]
+        class_name = all_names[i]
+        detections.append({
+            "class": class_name,
+            "confidence": conf,
+            "bbox": {
+                "x": float(x1),
+                "y": float(y1),
+                "width": float(x2 - x1),
+                "height": float(y2 - y1),
+            },
+        })
 
     annotated = draw_annotations(img_array, detections)
     annotated_pil = Image.fromarray(annotated)
@@ -531,7 +714,7 @@ async def predict(
         detections=detections,
         annotated_image=annotated_b64,
         processing_time=processing_time,
-        model_version="yolov8s-v2.0",
+        model_version="ensemble-v3.0",
     )
 
 
@@ -565,8 +748,7 @@ async def predict_detailed(
 
     start_time = time.time()
     try:
-        model = get_model()
-        results = model(img_array, conf=CONFIDENCE_THRESHOLD, verbose=False)
+        all_boxes, all_confs, all_names, _ = run_ensemble(img_array, CONFIDENCE_THRESHOLD)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model inference failed: {str(e)}")
 
@@ -574,32 +756,28 @@ async def predict_detailed(
     detections_detailed = []
     class_counts = {}
 
-    for result in results:
-        boxes = result.boxes
-        for i in range(len(boxes)):
-            cls_id = int(boxes.cls[i].item())
-            conf = float(boxes.conf[i].item())
-            xyxy = boxes.xyxy[i].cpu().numpy()
-            x1, y1, x2, y2 = xyxy
-            class_name = get_class_name(model, cls_id)
-            sev = severity_from_confidence(conf)
+    for i in range(len(all_boxes)):
+        conf = all_confs[i]
+        x1, y1, x2, y2 = all_boxes[i]
+        class_name = all_names[i]
+        sev = severity_from_confidence(conf)
 
-            det = {
-                "class": class_name,
-                "confidence": conf,
-                "bbox": {
-                    "x": float(x1),
-                    "y": float(y1),
-                    "width": float(x2 - x1),
-                    "height": float(y2 - y1),
-                },
-            }
-            detections.append(det)
+        det = {
+            "class": class_name,
+            "confidence": conf,
+            "bbox": {
+                "x": float(x1),
+                "y": float(y1),
+                "width": float(x2 - x1),
+                "height": float(y2 - y1),
+            },
+        }
+        detections.append(det)
 
-            eng = build_engineering_analysis(det, w, h, pixel_scale_mm, environment)
-            detections_detailed.append({**det, "severity": sev, "engineering": eng["engineering"]})
+        eng = build_engineering_analysis(det, w, h, pixel_scale_mm, environment)
+        detections_detailed.append({**det, "severity": sev, "engineering": eng["engineering"]})
 
-            class_counts[class_name] = class_counts.get(class_name, 0) + 1
+        class_counts[class_name] = class_counts.get(class_name, 0) + 1
 
     annotated = draw_annotations(img_array, detections)
     annotated_pil = Image.fromarray(annotated)
@@ -628,7 +806,7 @@ async def predict_detailed(
         detections=detections,
         annotated_image=annotated_b64,
         processing_time=processing_time,
-        model_version="yolov8s-v2.0",
+        model_version="ensemble-v3.0",
         detections_detailed=detections_detailed,
         summary=summary,
     )
