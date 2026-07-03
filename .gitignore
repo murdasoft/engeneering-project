@@ -37,6 +37,11 @@ logs/
 *.sql
 *.dump
 
+# Node.js / Next.js
+node_modules/
+.next/
+out/
+
 # Vercel
 .vercel/
 .vercel

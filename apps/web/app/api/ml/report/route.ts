@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const mlUrl = process.env.ML_API_URL ?? "http://localhost:8000";
+  const mlUrl = process.env.ML_API_URL ?? "https://alllxndr-inspectai-ml.hf.space";
   const mlApiKey = process.env.ML_API_KEY ?? "";
 
   const formData = await req.formData();

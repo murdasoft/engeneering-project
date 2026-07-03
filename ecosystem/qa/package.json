@@ -1,0 +1,18 @@
+{
+  "name": "ecosystem-qa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "QA suite for EngAI ecosystem projects — Playwright E2E + Lighthouse audits",
+  "scripts": {
+    "test": "playwright test",
+    "test:visual": "playwright test --grep @visual",
+    "test:functional": "playwright test --grep @functional",
+    "lighthouse": "node lighthouse-audit.mjs",
+    "qa": "npm run test && npm run lighthouse"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "lighthouse": "^12.2.0",
+    "chrome-launcher": "^1.1.2"
+  }
+}
