@@ -83,10 +83,29 @@ async def telegram_webhook(
     chat_id = message["chat"]["id"]
     text = message.get("text", "")
     voice = message.get("voice")
+    photo = message.get("photo")
 
     # Handle /start
     if text == "/start":
         await handle_start(chat_id)
+        return JSONResponse({"ok": True})
+
+    # Handle photo messages → InspectAI analysis
+    if photo:
+        await send_chat_action(chat_id, "typing")
+        from bot.telegram_client import get_file_url
+        from bot.inspectai import analyze_photo
+
+        # Get largest photo
+        largest = max(photo, key=lambda p: p.get("file_size", 0))
+        file_id = largest.get("file_id")
+        if file_id:
+            photo_url = await get_file_url(file_id)
+            if photo_url:
+                await analyze_photo(chat_id, photo_url)
+                return JSONResponse({"ok": True})
+
+        await send_message(chat_id, "Не удалось загрузить фотографию. Попробуйте ещё раз.")
         return JSONResponse({"ok": True})
 
     # Handle voice messages → STT → same text router (ТЗ 3.9)
