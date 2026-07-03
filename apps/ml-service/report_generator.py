@@ -29,10 +29,12 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 # ── Fonts ────────────────────────────────────────────────────────────────────
+import os as _os
+_FONT_DIR = _os.path.join(_os.path.dirname(__file__), "fonts")
 try:
-    pdfmetrics.registerFont(TTFont("DejaVu", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
-    pdfmetrics.registerFont(TTFont("DejaVu-Bold", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"))
-    pdfmetrics.registerFont(TTFont("DejaVu-Oblique", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf"))
+    pdfmetrics.registerFont(TTFont("DejaVu", _os.path.join(_FONT_DIR, "DejaVuSans.ttf")))
+    pdfmetrics.registerFont(TTFont("DejaVu-Bold", _os.path.join(_FONT_DIR, "DejaVuSans-Bold.ttf")))
+    pdfmetrics.registerFont(TTFont("DejaVu-Oblique", _os.path.join(_FONT_DIR, "DejaVuSans-Oblique.ttf")))
     FONT = "DejaVu"
     FONT_BOLD = "DejaVu-Bold"
     FONT_ITALIC = "DejaVu-Oblique"
