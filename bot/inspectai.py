@@ -16,8 +16,8 @@ from bot.config import settings
 
 logger = logging.getLogger(__name__)
 
-_ML_API_URL = getattr(settings, "ml_api_url", "https://alllxndr-inspectai-ml.hf.space")
-_ML_API_KEY = getattr(settings, "ml_api_key", "")
+_ML_API_URL = settings.ml_api_url.rstrip("/")
+_ML_API_KEY = settings.ml_api_key
 
 
 async def analyze_photo(chat_id: int, photo_url: str) -> None:
@@ -65,10 +65,17 @@ async def analyze_photo(chat_id: int, photo_url: str) -> None:
 
         # Build summary message
         summary = result.get("summary", {})
-        detections = result.get("detections_detailed", [])
+        all_detections = result.get("detections_detailed", [])
+
+        # Filter out background / wall / concrete classes client-side as extra guard
+        _rejected = {"background", "wall", "concrete", "surface", "normal", "good"}
+        detections = [
+            d for d in all_detections
+            if not any(r in d.get("class", "").lower() for r in _rejected)
+        ]
 
         msg_parts = ["📋 <b>Результат анализа InspectAI</b>"]
-        msg_parts.append(f"Всего дефектов: {summary.get('total', 0)}")
+        msg_parts.append(f"Всего дефектов: {len(detections)}")
         msg_parts.append(f"🔴 Критических: {summary.get('high', 0)}")
         msg_parts.append(f"🟡 Значительных: {summary.get('medium', 0)}")
         msg_parts.append(f"🟢 Незначительных: {summary.get('low', 0)}")
@@ -86,6 +93,8 @@ async def analyze_photo(chat_id: int, photo_url: str) -> None:
                     f"{idx}. {sev_emoji} {name} — {conf:.0%}"
                     f"{' | ширина: ' + f'{width_mm:.2f} мм' if width_mm else ''}"
                 )
+            if len(detections) > 5:
+                msg_parts.append(f"\n<i>...и ещё {len(detections) - 5} дефект(ов)</i>")
 
         overall = summary.get("overall_condition", "NORMAL")
         condition_map = {

@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     pdf_kmew_file_id: str = Field("", description="Telegram file_id for KMEW PDF")
     pdf_3mm_file_id: str = Field("", description="Telegram file_id for 3MM PDF")
 
+    # --- InspectAI ML Service ---
+    ml_api_url: str = Field("https://alllxndr-inspectai-ml.hf.space", description="InspectAI ML service URL")
+    ml_api_key: str = Field("", description="ML service API key")
+
     # --- Ops ---
     ops_alert_chat_id: str = Field("", description="Telegram chat ID for manager alerts")
     voice_debug_enabled: bool = Field(False)
