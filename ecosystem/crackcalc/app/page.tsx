@@ -55,10 +55,10 @@ const faqItems = [
 ];
 
 const relatedTools = [
-  { name: "ConcreteMix", desc: { en: "Repair concrete mix design", ru: "Подбор состава ремонтного бетона" }, href: "https://concretemix.vercel.app", icon: "🧪" },
-  { name: "LoadBear", desc: { en: "Load-bearing capacity calculator", ru: "Расчёт несущей способности" }, href: "https://loadbear.vercel.app", icon: "🏗️" },
-  { name: "InspectAI", desc: { en: "AI structural inspection", ru: "AI-обследование конструкций" }, href: "https://inspectai-app-coral.vercel.app", icon: "🔍" },
-  { name: "NormBase", desc: { en: "Normative documents reference", ru: "Справочник нормативов" }, href: "https://normbase.vercel.app", icon: "📚" },
+  { name: "ConcreteMix", desc: { en: "Repair concrete mix design", ru: "Подбор состава ремонтного бетона" }, href: "/dashboard/tools/concretemix", icon: "🧪" },
+  { name: "LoadBear", desc: { en: "Load-bearing capacity calculator", ru: "Расчёт несущей способности" }, href: "/dashboard/tools/loadbear", icon: "🏗️" },
+  { name: "InspectAI", desc: { en: "AI structural inspection", ru: "AI-обследование конструкций" }, href: "/dashboard", icon: "🔍" },
+  { name: "NormBase", desc: { en: "Normative documents reference", ru: "Справочник нормативов" }, href: "/dashboard/tools/normbase", icon: "📚" },
 ];
 
 interface Measurement {
@@ -254,7 +254,7 @@ export default function Page() {
     <div className="min-h-screen">
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "glass py-3" : "py-5 bg-transparent"}`}>
         <div className="container-max flex items-center justify-between">
-          <Link href="https://engai-hub.vercel.app" className="flex items-center gap-2.5 group">
+          <Link href="/dashboard" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-primary-container flex items-center justify-center font-display font-bold text-on-primary text-lg group-hover:scale-105 transition-transform">E</div>
             <span className="font-display font-bold text-xl text-on-surface">Eng<span className="gradient-text">AI</span></span>
           </Link>
@@ -396,10 +396,10 @@ export default function Page() {
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
-                <a href="https://concretemix.vercel.app" target="_blank" rel="noopener noreferrer" className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm">
+                <a href="/dashboard/tools/concretemix" target="_blank" rel="noopener noreferrer" className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm">
                   {t.repairMix} <ArrowRight className="w-4 h-4" />
                 </a>
-                <a href="https://inspectai-app-coral.vercel.app" target="_blank" rel="noopener noreferrer" className="btn-ghost flex-1 flex items-center justify-center gap-2 text-sm">
+                <a href="/dashboard" target="_blank" rel="noopener noreferrer" className="btn-ghost flex-1 flex items-center justify-center gap-2 text-sm">
                   {t.uploadPhoto} <ArrowRight className="w-4 h-4" />
                 </a>
               </div>
@@ -575,9 +575,9 @@ export default function Page() {
             <span>·</span>
             <span>EN 1992-1-1</span>
             <span>·</span>
-            <a href="https://engai-hub.vercel.app" className="hover:text-primary transition-colors">EngAI Hub</a>
+            <a href="/dashboard" className="hover:text-primary transition-colors">EngAI Hub</a>
             <span>·</span>
-            <a href="https://inspectai-app-coral.vercel.app" className="hover:text-primary transition-colors">InspectAI</a>
+            <a href="/dashboard" className="hover:text-primary transition-colors">InspectAI</a>
             <span>·</span>
             <span>© 2025 EngAI</span>
           </div>

@@ -160,7 +160,7 @@ export default function AssetModal({
     const params = new URLSearchParams();
     if (width > 0) params.set("width", String(width.toFixed(2)));
     if (length > 0) params.set("length", String(length.toFixed(2)));
-    return `https://crackcalc.vercel.app${params.toString() ? `?${params.toString()}` : ""}`;
+    return `/dashboard/tools/crackcalc${params.toString() ? `?${params.toString()}` : ""}`;
   };
 
   const completedAnalysis = asset.analyses.find((a) => a.status === "COMPLETED");

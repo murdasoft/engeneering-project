@@ -1,31 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 
 const TOOL_URLS: Record<string, { url: string; name: string; desc: string }> = {
   crackcalc: {
-    url: "https://crackcalc.vercel.app",
+    url: "/tools-assets/crackcalc",
     name: "CrackCalc",
     desc: "Crack width calculation, growth prediction, multi-standard analysis",
   },
   loadbear: {
-    url: "https://loadbear.vercel.app",
+    url: "/tools-assets/loadbear",
     name: "LoadBear",
     desc: "Load-bearing capacity of reinforced concrete sections",
   },
   concretemix: {
-    url: "https://concretemix.vercel.app",
+    url: "/tools-assets/concretemix",
     name: "ConcreteMix",
     desc: "Concrete mix design, cost calculation, granulometry",
   },
   rebardesign: {
-    url: "https://rebardesign.vercel.app",
+    url: "/tools-assets/rebardesign",
     name: "RebarDesign",
     desc: "Reinforcement design for concrete sections",
   },
   normbase: {
-    url: "https://normbase.vercel.app",
+    url: "/tools-assets/normbase",
     name: "NormBase",
     desc: "Normative database — GOST, SP, SNiP full-text search",
   },
@@ -34,6 +34,13 @@ const TOOL_URLS: Record<string, { url: string; name: string; desc: string }> = {
 export default function ToolPage({ params }: { params: { tool: string } }) {
   const tool = TOOL_URLS[params.tool];
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSearch(window.location.search);
+    }
+  }, []);
 
   if (!tool) {
     return (
@@ -74,7 +81,7 @@ export default function ToolPage({ params }: { params: { tool: string } }) {
           </div>
         </div>
         <a
-          href={tool.url}
+          href={`${tool.url}${search}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center gap-xs text-primary font-label-caps text-[11px] hover:underline"
@@ -91,7 +98,7 @@ export default function ToolPage({ params }: { params: { tool: string } }) {
           </div>
         )}
         <iframe
-          src={tool.url}
+          src={`${tool.url}${search}`}
           className="w-full h-full border-0"
           onLoad={() => setLoading(false)}
           title={tool.name}

@@ -47,11 +47,11 @@ const faqItems = [
 ];
 
 const relatedTools = [
-  { name: "LoadBear", desc: { en: "Load-bearing capacity calculator", ru: "Расчёт несущей способности" }, href: "https://loadbear.vercel.app", icon: "🏗️" },
-  { name: "ConcreteMix", desc: { en: "Concrete mix design", ru: "Подбор состава бетона" }, href: "https://concretemix.vercel.app", icon: "🧪" },
-  { name: "CrackCalc", desc: { en: "Crack assessment by GOST", ru: "Оценка трещин по ГОСТ" }, href: "https://crackcalc.vercel.app", icon: "📏" },
-  { name: "NormBase", desc: { en: "Normative documents reference", ru: "Справочник нормативов" }, href: "https://normbase.vercel.app", icon: "📚" },
-  { name: "InspectAI", desc: { en: "AI structural inspection", ru: "AI-обследование конструкций" }, href: "https://inspectai-app-coral.vercel.app", icon: "🔍" },
+  { name: "LoadBear", desc: { en: "Load-bearing capacity calculator", ru: "Расчёт несущей способности" }, href: "/dashboard/tools/loadbear", icon: "🏗️" },
+  { name: "ConcreteMix", desc: { en: "Concrete mix design", ru: "Подбор состава бетона" }, href: "/dashboard/tools/concretemix", icon: "🧪" },
+  { name: "CrackCalc", desc: { en: "Crack assessment by GOST", ru: "Оценка трещин по ГОСТ" }, href: "/dashboard/tools/crackcalc", icon: "📏" },
+  { name: "NormBase", desc: { en: "Normative documents reference", ru: "Справочник нормативов" }, href: "/dashboard/tools/normbase", icon: "📚" },
+  { name: "InspectAI", desc: { en: "AI structural inspection", ru: "AI-обследование конструкций" }, href: "/dashboard", icon: "🔍" },
 ];
 
 const tr = {
@@ -357,7 +357,7 @@ export default function Page() {
     <div className="min-h-screen">
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "glass py-3" : "py-5 bg-transparent"}`}>
         <div className="container-max flex items-center justify-between">
-          <Link href="https://engai-hub.vercel.app" className="flex items-center gap-2.5 group">
+          <Link href="/dashboard" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary to-primary-container flex items-center justify-center font-display font-bold text-on-primary text-lg group-hover:scale-105 transition-transform">E</div>
             <span className="font-display font-bold text-xl text-on-surface">Eng<span className="gradient-text">AI</span></span>
           </Link>
@@ -418,7 +418,7 @@ export default function Page() {
               </div>
               <div className="mt-4 flex gap-2">
                 <button onClick={exportSVG} className="btn-ghost flex-1 flex items-center justify-center gap-1 text-xs"><Download className="w-3.5 h-3.5" /> {t.exportSVG}</button>
-                <a href="https://loadbear.vercel.app" target="_blank" rel="noopener noreferrer" className="btn-ghost flex-1 flex items-center justify-center gap-1 text-xs"><Link2 className="w-3.5 h-3.5" /> LoadBear →</a>
+                <a href="/dashboard/tools/loadbear" target="_blank" rel="noopener noreferrer" className="btn-ghost flex-1 flex items-center justify-center gap-1 text-xs"><Link2 className="w-3.5 h-3.5" /> LoadBear →</a>
               </div>
             </div>
             <div className="space-y-4">
@@ -632,9 +632,9 @@ export default function Page() {
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-on-surface-variant">
             <span>GOST 5781-82</span>
             <span>·</span>
-            <a href="https://engai-hub.vercel.app" className="hover:text-primary transition-colors">EngAI Hub</a>
+            <a href="/dashboard" className="hover:text-primary transition-colors">EngAI Hub</a>
             <span>·</span>
-            <a href="https://inspectai-app-coral.vercel.app" className="hover:text-primary transition-colors">InspectAI</a>
+            <a href="/dashboard" className="hover:text-primary transition-colors">InspectAI</a>
             <span>·</span>
             <span>© 2025 EngAI</span>
           </div>
