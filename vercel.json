@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "framework": null,
+  "routes": [
+    { "src": "/webhook/telegram", "dest": "/api/index.py" },
+    { "src": "/setup", "dest": "/api/index.py" },
+    { "src": "/health", "dest": "/api/index.py" },
+    { "src": "/(.*)", "dest": "/api/index.py" }
+  ]
+}

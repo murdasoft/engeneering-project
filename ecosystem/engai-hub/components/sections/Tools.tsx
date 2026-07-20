@@ -120,8 +120,8 @@ export default function ToolsSection() {
               <p className="text-sm text-slate-400">Результаты одного автоматически передаются в другой</p>
             </div>
           </div>
-          <a href="https://inspectai-app-coral.vercel.app" target="_blank" rel="noopener noreferrer" className="btn-primary text-sm whitespace-nowrap">
-            Начать с InspectAI →
+          <a href="/dashboard" className="btn-primary text-sm whitespace-nowrap">
+            Open Dashboard →
           </a>
         </div>
       </div>

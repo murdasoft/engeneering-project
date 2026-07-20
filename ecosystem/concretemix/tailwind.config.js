@@ -7,24 +7,26 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bg: {
-          900: "#0a0e14",
-          800: "#0f1419",
-          700: "#161b22",
-          600: "#1c2330",
+        background: "var(--background)",
+        surface: {
+          DEFAULT: "var(--surface)",
+          container: {
+            DEFAULT: "var(--surface-container)",
+            lowest: "var(--surface-container-lowest)",
+          },
         },
-        accent: {
-          DEFAULT: "#0ea5e9",
-          light: "#38bdf8",
-          dark: "#0284c7",
+        primary: {
+          DEFAULT: "var(--primary)",
+          container: "var(--primary-container)",
+          on: "var(--on-primary)",
         },
-        eng: {
-          50: "#f0f9ff",
-          100: "#e0f2fe",
-          500: "#0ea5e9",
-          600: "#0284c7",
-          700: "#0369a1",
-          900: "#0c4a6e",
+        "on-surface": {
+          DEFAULT: "var(--on-surface)",
+          variant: "var(--on-surface-variant)",
+        },
+        "on-primary": "var(--on-primary)",
+        outline: {
+          variant: "var(--outline-variant)",
         },
       },
       fontFamily: {

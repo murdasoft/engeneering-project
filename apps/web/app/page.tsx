@@ -55,7 +55,7 @@ export default function HomePage() {
         </nav>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <Link href="/demo" style={{ padding: "8px 18px", fontSize: 15, textDecoration: "none", color: "#0d7377", fontWeight: 700 }}>Demo</Link>
-          <button className="btn-hover" style={{ padding: "10px 22px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #0d7377, #0a5c5f)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(13,115,119,0.25)" }}>Sign in</button>
+          <Link href="/login" className="btn-hover" style={{ padding: "10px 22px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #0d7377, #0a5c5f)", color: "#fff", fontSize: 15, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 14px rgba(13,115,119,0.25)", textDecoration: "none", display: "inline-block" }}>Sign in</Link>
         </div>
       </header>
 
@@ -74,14 +74,14 @@ export default function HomePage() {
             Upload a construction surface photo — AI detects cracks, spalling, and corrosion in seconds. A preliminary assessment you can verify and save into a report.
           </p>
           <div style={{ display: "flex", gap: 14, marginBottom: 20 }}>
-            <Link href="/demo" className="btn-hover" style={{ padding: "16px 32px", borderRadius: 12, background: "linear-gradient(135deg, #0d7377, #0a5c5f)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 10, boxShadow: "0 6px 20px rgba(13,115,119,0.3)" }}>
-              📷 Try the demo
+            <Link href="/login" className="btn-hover" style={{ padding: "16px 32px", borderRadius: 12, background: "linear-gradient(135deg, #0d7377, #0a5c5f)", color: "#fff", textDecoration: "none", fontWeight: 700, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 10, boxShadow: "0 6px 20px rgba(13,115,119,0.3)" }}>
+              � Open Engineering Hub
             </Link>
-            <a href="#how" className="btn-hover" style={{ padding: "16px 32px", borderRadius: 12, border: "1px solid #dee2e6", color: "#495057", textDecoration: "none", fontWeight: 600, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 8, background: "#fff" }}>
-              How it works →
-            </a>
+            <Link href="/demo" className="btn-hover" style={{ padding: "16px 32px", borderRadius: 12, border: "1px solid #dee2e6", color: "#495057", textDecoration: "none", fontWeight: 600, fontSize: 16, display: "inline-flex", alignItems: "center", gap: 8, background: "#fff" }}>
+              Try demo →
+            </Link>
           </div>
-          <p style={{ fontSize: 14, color: "#868e96" }}>No registration — just upload a photo</p>
+          <p style={{ fontSize: 14, color: "#868e96" }}>Free registration — start inspecting in minutes</p>
         </div>
 
         <div className="anim-2 anim-float" style={{ position: "relative" }}>

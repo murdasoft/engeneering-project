@@ -5,72 +5,78 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-  --bg-900: #0a0e14;
-  --bg-800: #0f1419;
-  --bg-700: #161b22;
-  --accent: #0ea5e9;
-  --accent-light: #38bdf8;
+  --background: #f0fcfb;
+  --surface: #ffffff;
+  --surface-container: #f4f9f9;
+  --surface-container-lowest: #ffffff;
+  --primary: #004349;
+  --primary-container: #0f5c63;
+  --on-primary: #ffffff;
+  --on-surface: #131d1d;
+  --on-surface-variant: #576767;
+  --outline-variant: #bfc8c9;
 }
 
 * { scroll-behavior: smooth; }
 
 body {
-  background: var(--bg-900);
-  color: #e2e8f0;
+  background: var(--background);
+  color: var(--on-surface);
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
 
-::selection { background: rgba(14, 165, 233, 0.3); color: #fff; }
+::selection { background: rgba(0, 67, 73, 0.2); color: var(--on-surface); }
 ::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: var(--bg-900); }
-::-webkit-scrollbar-thumb { background: #1c2330; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #2a3441; }
+::-webkit-scrollbar-track { background: var(--background); }
+::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--primary); }
 
 @layer components {
   .glass {
-    background: rgba(15, 20, 25, 0.6);
+    background: rgba(255, 255, 255, 0.7);
     backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--outline-variant);
   }
   .glass-hover {
     @apply glass transition-all duration-300;
   }
   .glass-hover:hover {
-    border-color: rgba(14, 165, 233, 0.3);
-    background: rgba(15, 20, 25, 0.8);
+    border-color: var(--primary);
+    background: rgba(255, 255, 255, 0.9);
   }
   .gradient-text {
-    background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 50%, #0ea5e9 100%);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-container) 50%, var(--primary) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
   .grid-bg {
     background-image:
-      linear-gradient(rgba(14, 165, 233, 0.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(14, 165, 233, 0.03) 1px, transparent 1px);
+      linear-gradient(rgba(0, 67, 73, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 67, 73, 0.04) 1px, transparent 1px);
     background-size: 50px 50px;
   }
-  .glow-accent { box-shadow: 0 0 30px rgba(14, 165, 233, 0.15); }
+  .glow-accent { box-shadow: 0 0 30px rgba(0, 67, 73, 0.08); }
   .btn-primary {
-    @apply px-6 py-3 rounded-xl bg-accent text-white font-semibold transition-all duration-300 hover:bg-sky-600 hover:shadow-lg hover:shadow-accent/20;
+    @apply px-6 py-3 rounded-xl bg-primary text-on-primary font-semibold transition-all duration-300 hover:bg-primary-container hover:shadow-lg;
+    --tw-shadow-color: rgba(0, 67, 73, 0.2);
   }
   .btn-ghost {
-    @apply px-6 py-3 rounded-xl border border-white/10 text-slate-300 font-medium transition-all duration-300 hover:border-accent/40 hover:text-white;
+    @apply px-6 py-3 rounded-xl border border-outline-variant text-on-surface-variant font-medium transition-all duration-300 hover:border-primary hover:text-primary;
   }
   .section-padding { @apply py-20 md:py-32; }
   .container-max { @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8; }
   .card-hover {
-    @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-lg hover:shadow-accent/10;
+    @apply transition-all duration-300 hover:scale-[1.02] hover:shadow-lg;
+    --tw-shadow-color: rgba(0, 67, 73, 0.1);
   }
 }
 
 @keyframes fadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
 @keyframes slideUp { 0% { opacity: 0; transform: translateY(30px); } 100% { opacity: 1; transform: translateY(0); } }
 @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-15px); } }
-@keyframes shimmer { 0% { backgroundPosition: "-200% 0"; } 100% { backgroundPosition: "200% 0"; } }
 
 .animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
 .animate-slide-up { animation: slideUp 0.8s ease-out forwards; }

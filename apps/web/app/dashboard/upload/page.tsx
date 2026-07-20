@@ -1,0 +1,230 @@
+"use client";
+
+import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
+
+interface Project {
+  id: string;
+  name: string;
+  siteId: string | null;
+}
+
+interface UploadedFile {
+  name: string;
+  size: number;
+  status: "pending" | "uploading" | "done" | "error";
+  url?: string;
+}
+
+export default function UploadPage() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProject, setSelectedProject] = useState("");
+  const [files, setFiles] = useState<UploadedFile[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/projects")
+      .then((r) => r.json())
+      .then((data) => {
+        setProjects(data.projects ?? []);
+        if (data.projects?.length > 0) setSelectedProject(data.projects[0].id);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleFiles = useCallback((fileList: FileList) => {
+    const newFiles = Array.from(fileList).map((f) => ({
+      name: f.name,
+      size: f.size,
+      status: "pending" as const,
+    }));
+    setFiles((prev) => [...prev, ...newFiles]);
+  }, []);
+
+  async function uploadAll() {
+    if (!selectedProject) return;
+    const fileInputs = document.querySelectorAll<HTMLInputElement>("#file-input");
+    const input = fileInputs[0];
+    if (!input.files) return;
+
+    const fileMap = Array.from(input.files);
+    for (let i = 0; i < fileMap.length; i++) {
+      const file = fileMap[i];
+      setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "uploading" } : f)));
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("projectId", selectedProject);
+      try {
+        const res = await fetch("/api/assets/upload", { method: "POST", body: formData });
+        if (res.ok) {
+          const data = await res.json();
+          setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "done", url: data.asset.blobUrl } : f)));
+        } else {
+          setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "error" } : f)));
+        }
+      } catch {
+        setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "error" } : f)));
+      }
+    }
+  }
+
+  return (
+    <div className="animate-fade-in flex flex-col h-[calc(100vh-4rem)]">
+      <header className="flex items-center justify-between mb-xl">
+        <div>
+          <p className="font-label-caps text-label-caps text-secondary mb-xs">BATCH UPLOAD</p>
+          <h2 className="font-headline-md text-headline-md">Upload Inspection Photos</h2>
+        </div>
+        <div className="flex items-center gap-md">
+          <select
+            value={selectedProject}
+            onChange={(e) => setSelectedProject(e.target.value)}
+            className="px-md py-sm border border-outline-variant bg-surface-container-lowest rounded-lg font-body-sm text-body-sm focus:border-primary focus:outline-none"
+          >
+            {loading && <option>Loading...</option>}
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          {files.length > 0 && (
+            <button
+              onClick={uploadAll}
+              className="px-md py-sm bg-primary text-on-primary font-label-caps text-label-caps rounded-lg hover:bg-primary-container transition-colors"
+            >
+              UPLOAD {files.length} FILES
+            </button>
+          )}
+        </div>
+      </header>
+
+      {projects.length === 0 && !loading ? (
+        <div className="bg-surface-container-lowest border border-outline-variant p-xl text-center">
+          <span className="material-symbols-outlined text-[64px] text-outline-variant">folder_off</span>
+          <h3 className="font-headline-md text-headline-md mt-md">No projects</h3>
+          <p className="font-body-sm text-on-surface-variant mt-xs mb-lg">Create a project first to upload photos.</p>
+          <Link href="/dashboard/projects" className="inline-flex items-center gap-xs bg-primary text-on-primary px-lg py-md font-label-caps text-label-caps rounded-lg hover:bg-primary-container transition-colors">
+            <span className="material-symbols-outlined text-[18px]">add</span>
+            CREATE PROJECT
+          </Link>
+        </div>
+      ) : (
+        <div className="flex flex-1 gap-gutter overflow-hidden">
+          {/* Drop Zone */}
+          <div className="flex-1 flex flex-col">
+            <div
+              className={`relative flex-1 min-h-[300px] border-2 border-dashed rounded-xl bg-surface-container-low technical-grid flex flex-col items-center justify-center transition-all ${
+                dragging ? "border-primary bg-primary/5" : "border-outline-variant hover:border-primary"
+              }`}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
+              onClick={() => document.getElementById("file-input")?.click()}
+            >
+              <input
+                id="file-input"
+                type="file"
+                multiple
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={(e) => e.target.files && handleFiles(e.target.files)}
+              />
+              <span className="material-symbols-outlined text-outline-variant text-[64px] mb-lg">upload_file</span>
+              <p className="font-headline-md text-headline-md text-on-surface-variant mb-xs">Drop files to scan</p>
+              <p className="font-body-sm text-body-sm text-outline">JPG, PNG, WEBP (Max 50MB per file)</p>
+            </div>
+
+            {/* Preview Grid */}
+            {files.length > 0 && (
+              <div className="mt-xl grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-gutter overflow-y-auto">
+                {files.map((f, i) => (
+                  <div key={i} className="bg-surface-container-lowest border border-outline-variant p-xs rounded shadow-sm">
+                    <div className="aspect-square bg-surface-container rounded-xs overflow-hidden flex items-center justify-center">
+                      <span className={`material-symbols-outlined text-[32px] ${
+                        f.status === "done" ? "text-primary" :
+                        f.status === "uploading" ? "text-secondary animate-spin" :
+                        f.status === "error" ? "text-error" :
+                        "text-outline-variant"
+                      }`}>
+                        {f.status === "done" ? "check_circle" :
+                         f.status === "uploading" ? "progress_activity" :
+                         f.status === "error" ? "error" :
+                         "image"}
+                      </span>
+                    </div>
+                    <div className="mt-sm flex justify-between items-start">
+                      <div className="overflow-hidden">
+                        <p className="font-mono-data text-mono-data truncate">{f.name}</p>
+                        <p className="font-label-caps text-[10px] text-outline">{(f.size / 1024 / 1024).toFixed(1)} MB</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Right Panel: Quality Guidance */}
+          <aside className="w-80 border-l border-outline-variant bg-surface-container-lowest flex flex-col p-lg space-y-lg overflow-y-auto">
+            <section>
+              <h3 className="font-label-caps text-label-caps text-outline mb-md">PROJECT CONTEXT</h3>
+              <div className="p-md bg-surface-container border border-outline-variant rounded">
+                <p className="font-body-sm text-body-sm">{projects.find(p => p.id === selectedProject)?.name ?? "—"}</p>
+                <p className="text-[11px] text-on-surface-variant font-mono-data mt-xs">
+                  ID: {projects.find(p => p.id === selectedProject)?.siteId ?? "—"}
+                </p>
+              </div>
+            </section>
+
+            <hr className="border-outline-variant" />
+
+            <section>
+              <button
+                onClick={uploadAll}
+                disabled={files.length === 0}
+                className="w-full h-12 bg-primary text-on-primary font-title-sm text-title-sm rounded-lg hover:bg-primary-container transition-all flex items-center justify-center gap-md disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined">analytics</span>
+                Run AI Analysis
+              </button>
+            </section>
+
+            <section className="flex-1 bg-surface-container-low rounded-xl p-md border border-outline-variant">
+              <div className="flex items-center gap-sm mb-md text-primary">
+                <span className="material-symbols-outlined">lightbulb</span>
+                <h3 className="font-label-caps text-label-caps">QUALITY GUIDANCE</h3>
+              </div>
+              <ul className="space-y-lg">
+                <li className="flex gap-md">
+                  <span className="material-symbols-outlined text-secondary text-[20px]">wb_sunny</span>
+                  <div>
+                    <p className="font-body-sm text-body-sm font-bold">Uniform Lighting</p>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant">Avoid harsh shadows or direct sunlight on concrete surfaces.</p>
+                  </div>
+                </li>
+                <li className="flex gap-md">
+                  <span className="material-symbols-outlined text-secondary text-[20px]">center_focus_strong</span>
+                  <div>
+                    <p className="font-body-sm text-body-sm font-bold">Critical Sharpness</p>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant">AI requires clear edges for crack measurement. Use a tripod for low-light.</p>
+                  </div>
+                </li>
+                <li className="flex gap-md">
+                  <span className="material-symbols-outlined text-secondary text-[20px]">straighten</span>
+                  <div>
+                    <p className="font-body-sm text-body-sm font-bold">Orthogonal Angle</p>
+                    <p className="font-body-sm text-body-sm text-on-surface-variant">Shoot perpendicular to the surface for accurate measurements.</p>
+                  </div>
+                </li>
+              </ul>
+              <div className="mt-lg p-sm bg-tertiary-fixed text-on-tertiary-fixed rounded border border-tertiary-container">
+                <p className="font-label-caps text-[10px] uppercase font-black mb-xs">CONFIDENCE TIP</p>
+                <p className="font-body-sm text-[11px] leading-tight">High-resolution images (4K+) result in 35% higher AI confidence scores.</p>
+              </div>
+            </section>
+          </aside>
+        </div>
+      )}
+    </div>
+  );
+}
