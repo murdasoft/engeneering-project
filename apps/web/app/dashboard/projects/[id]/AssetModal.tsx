@@ -30,7 +30,7 @@ interface Finding {
   className: string;
   confidence: number;
   severity: string;
-  bbox: { x: number; y: number; width: number; height: number };
+  bbox: { x: number; y: number; width: number; height: number; polygon?: number[][] | null };
   widthMm: number | null;
   heightMm: number | null;
   areaMm2: number | null;
@@ -186,16 +186,27 @@ export default function AssetModal({
             <img ref={imgRef} src={asset.blobUrl} alt={asset.filename} className="w-full h-auto block" onLoad={onImgLoad} />
             {allItems.map((d, i) => {
               const sev = (d.severity || "low").toUpperCase();
-              const color = d.class === "other" ? "bg-slate-400/60" : sev === "CRITICAL" ? "bg-red-500/50" : sev === "HIGH" ? "bg-orange-500/50" : sev === "MEDIUM" ? "bg-amber-500/50" : "bg-emerald-500/50";
-              return (
+              const color = d.class === "other" ? "#94a3b8" : sev === "CRITICAL" ? "#ef4444" : sev === "HIGH" ? "#f97316" : sev === "MEDIUM" ? "#f59e0b" : "#10b981";
+              const polygon = d.bbox?.polygon;
+              return polygon?.length ? (
+                <svg
+                  key={d.id || i}
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  viewBox={`0 0 ${imgRef.current?.naturalWidth || 1} ${imgRef.current?.naturalHeight || 1}`}
+                  preserveAspectRatio="none"
+                >
+                  <polygon points={polygon.map((p: number[]) => `${p[0]},${p[1]}`).join(" ")} fill={`${color}45`} stroke={color} strokeWidth="3" />
+                </svg>
+              ) : (
                 <div
                   key={d.id || i}
-                  className={`absolute border-2 border-white/80 ${color}`}
+                  className="absolute border-2 bg-transparent"
                   style={{
                     left: d.bbox.x * scale,
                     top: d.bbox.y * scale,
                     width: d.bbox.width * scale,
                     height: d.bbox.height * scale,
+                    borderColor: color,
                   }}
                   title={`${d.class} ${(d.confidence * 100).toFixed(0)}%`}
                 />

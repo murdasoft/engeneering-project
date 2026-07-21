@@ -6,7 +6,7 @@ import Link from "next/link";
 type Detection = {
   class: string;
   confidence: number;
-  bbox: { x: number; y: number; width: number; height: number };
+  bbox: { x: number; y: number; width: number; height: number; polygon?: number[][] | null };
   width_mm: number;
   length_mm: number;
   area_mm2: number;
@@ -181,11 +181,22 @@ export default function DemoPage() {
                     const s = SV[d.severity as keyof typeof SV] || SV.low;
                     const a = active === i;
                     const dim = active !== null && !a;
-                    return (
+                    return d.bbox.polygon?.length ? (
+                      <svg
+                        key={i}
+                        onMouseEnter={() => setActive(i)}
+                        onMouseLeave={() => setActive(null)}
+                        style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: dim ? 0.25 : 0.9, transition: "opacity .15s ease" }}
+                        viewBox={`0 0 ${imgRef.current?.naturalWidth || 1} ${imgRef.current?.naturalHeight || 1}`}
+                        preserveAspectRatio="none"
+                      >
+                        <polygon points={d.bbox.polygon.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={a ? `${s.c}35` : `${s.c}20`} stroke={s.c} strokeWidth="3" />
+                      </svg>
+                    ) : (
                       <div key={i} onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)} style={{
                         position: "absolute", left: d.bbox.x * scale, top: d.bbox.y * scale,
                         width: d.bbox.width * scale, height: d.bbox.height * scale,
-                        border: `2.5px solid ${s.c}`, background: a ? `${s.c}22` : "transparent",
+                        border: `2.5px solid ${s.c}`, background: "transparent",
                         opacity: dim ? 0.25 : 0.9, transition: "all .15s ease", cursor: "pointer", borderRadius: 4,
                       }} />
                     );

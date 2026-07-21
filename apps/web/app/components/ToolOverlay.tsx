@@ -7,7 +7,7 @@ interface FindingLike {
   className: string;
   confidence: number;
   severity: string;
-  bbox: { x: number; y: number; width: number; height: number };
+  bbox: { x: number; y: number; width: number; height: number; polygon?: number[][] | null };
   widthMm: number | null;
   heightMm: number | null;
 }
@@ -55,10 +55,10 @@ export function ToolOverlay({
 
   const sev = (finding.severity || "low").toUpperCase();
   const color =
-    sev === "CRITICAL" ? "bg-red-500/50" :
-    sev === "HIGH" ? "bg-orange-500/50" :
-    sev === "MEDIUM" ? "bg-amber-500/50" :
-    "bg-emerald-500/50";
+    sev === "CRITICAL" ? "#ef4444" :
+    sev === "HIGH" ? "#f97316" :
+    sev === "MEDIUM" ? "#f59e0b" :
+    "#10b981";
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
@@ -94,16 +94,27 @@ export function ToolOverlay({
                 className="w-full h-auto block"
                 onLoad={onImgLoad}
               />
-              <div
-                className={`absolute border-2 border-white/80 ${color}`}
-                style={{
-                  left: finding.bbox.x * scale,
-                  top: finding.bbox.y * scale,
-                  width: finding.bbox.width * scale,
-                  height: finding.bbox.height * scale,
-                }}
-                title={`${finding.className} ${(finding.confidence * 100).toFixed(0)}%`}
-              />
+              {finding.bbox.polygon?.length ? (
+                <svg
+                  className="absolute inset-0 w-full h-full pointer-events-none"
+                  viewBox={`0 0 ${imgRef.current?.naturalWidth || 1} ${imgRef.current?.naturalHeight || 1}`}
+                  preserveAspectRatio="none"
+                >
+                  <polygon points={finding.bbox.polygon.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={`${color}45`} stroke={color} strokeWidth="3" />
+                </svg>
+              ) : (
+                <div
+                  className="absolute border-2 bg-transparent"
+                  style={{
+                    left: finding.bbox.x * scale,
+                    top: finding.bbox.y * scale,
+                    width: finding.bbox.width * scale,
+                    height: finding.bbox.height * scale,
+                    borderColor: color,
+                  }}
+                  title={`${finding.className} ${(finding.confidence * 100).toFixed(0)}%`}
+                />
+              )}
             </div>
 
             <div className="space-y-sm">

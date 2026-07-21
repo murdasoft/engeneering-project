@@ -34,7 +34,7 @@ HF_MODEL_FALLBACK = os.getenv("HF_MODEL_FALLBACK", "hyunon/crack-yolov8")
 HF_MODEL_FALLBACK_FILE = os.getenv("HF_MODEL_FALLBACK_FILE", "crack.pt")
 HF_MODEL_SECONDARY = os.getenv("HF_MODEL_SECONDARY", "keremberke/yolov8s-surface-crack-detection")
 HF_MODEL_SECONDARY_FILE = os.getenv("HF_MODEL_SECONDARY_FILE", "best.pt")
-CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.15"))
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.30"))
 
 # Non-crack object classes that cause false positives
 NON_CRACK_OBJECTS = {
@@ -257,6 +257,22 @@ def _box_area(box: list) -> float:
     return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
 
 
+def _box_area_ratio(box: list, img_array: np.ndarray) -> float:
+    image_h, image_w = img_array.shape[:2]
+    image_area = image_w * image_h
+    return _box_area(box) / image_area if image_area > 0 else 1.0
+
+
+def _intersection_over_smaller(box_a: list, box_b: list) -> float:
+    x1 = max(box_a[0], box_b[0])
+    y1 = max(box_a[1], box_b[1])
+    x2 = min(box_a[2], box_b[2])
+    y2 = min(box_a[3], box_b[3])
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
+    smaller_area = min(_box_area(box_a), _box_area(box_b))
+    return intersection / smaller_area if smaller_area > 0 else 0.0
+
+
 def _center_distance(box_a: list, box_b: list) -> float:
     cx_a = (box_a[0] + box_a[2]) / 2
     cy_a = (box_a[1] + box_a[3]) / 2
@@ -304,7 +320,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                         continue
                     if not _aspect_ratio_ok(box):
                         continue
-                    if _box_area(box) < 400:
+                    if _box_area(box) < 400 or _box_area_ratio(box, img_array) > 0.70:
                         continue
 
                     # Check overlap with non-crack objects
@@ -321,11 +337,13 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                     if not is_valid:
                         continue
 
-                    # Extract mask if available (segmentation model)
+                    # Extract mask polygon in original-image coordinates if available
                     mask = None
                     if hasattr(result, 'masks') and result.masks is not None:
                         try:
-                            mask = result.masks.data[i].cpu().numpy()
+                            polygon = result.masks.xy[i]
+                            if polygon is not None and len(polygon) >= 3:
+                                mask = [[float(point[0]), float(point[1])] for point in polygon]
                         except Exception:
                             pass
 
@@ -356,7 +374,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                         continue
                     if not _aspect_ratio_ok(box):
                         continue
-                    if _box_area(box) < 400:
+                    if _box_area(box) < 400 or _box_area_ratio(box, img_array) > 0.70:
                         continue
 
                     # Check overlap with non-crack objects
@@ -453,7 +471,8 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                 continue
             iou = compute_iou(all_boxes[i], all_boxes[j])
             c_dist = _center_distance(all_boxes[i], all_boxes[j])
-            if iou > iou_thresh or c_dist < center_thresh:
+            containment = _intersection_over_smaller(all_boxes[i], all_boxes[j])
+            if iou > iou_thresh or containment > 0.80 or c_dist < center_thresh:
                 suppressed[j] = True
 
     merged = []
@@ -944,10 +963,7 @@ async def predict(
         conf = all_confs[i]
         x1, y1, x2, y2 = all_boxes[i]
         class_name = all_names[i]
-        mask_data = None
-        if i < len(all_masks) and all_masks[i] is not None:
-            mask = all_masks[i]
-            mask_data = base64.b64encode(mask.tobytes()).decode("utf-8")
+        polygon = all_masks[i] if i < len(all_masks) and all_masks[i] else None
         detections.append({
             "class": class_name,
             "confidence": conf,
@@ -956,6 +972,7 @@ async def predict(
                 "y": float(y1),
                 "width": float(x2 - x1),
                 "height": float(y2 - y1),
+                "polygon": polygon,
             },
         })
 
@@ -1031,6 +1048,7 @@ async def predict_detailed(
                 "y": float(y1),
                 "width": float(x2 - x1),
                 "height": float(y2 - y1),
+                "polygon": all_masks[i] if all_masks[i] else None,
             },
         }
         detections.append(det)
@@ -1145,6 +1163,7 @@ async def generate_report(
                 "y": float(y1),
                 "width": float(x2 - x1),
                 "height": float(y2 - y1),
+                "polygon": all_masks[i] if all_masks[i] else None,
             },
         }
         detections.append(det)

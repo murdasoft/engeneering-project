@@ -9,7 +9,7 @@ interface Finding {
   className: string;
   confidence: number;
   severity: string;
-  bbox: { x: number; y: number; width: number; height: number };
+  bbox: { x: number; y: number; width: number; height: number; polygon?: number[][] | null };
   widthMm: number | null;
   heightMm: number | null;
 }
@@ -431,16 +431,27 @@ export default function UploadPage() {
                     />
                     {detail && detail.findings.map((f, i) => {
                       const sev = (f.severity || "low").toUpperCase();
-                      const color = sev === "CRITICAL" ? "bg-red-500/50" : sev === "HIGH" ? "bg-orange-500/50" : sev === "MEDIUM" ? "bg-amber-500/50" : "bg-emerald-500/50";
-                      return (
+                      const color = sev === "CRITICAL" ? "#ef4444" : sev === "HIGH" ? "#f97316" : sev === "MEDIUM" ? "#f59e0b" : "#10b981";
+                      const polygon = f.bbox.polygon;
+                      return polygon?.length ? (
+                        <svg
+                          key={f.id || i}
+                          className="absolute inset-0 w-full h-full pointer-events-none"
+                          viewBox={`0 0 ${imgRef.current?.naturalWidth || 1} ${imgRef.current?.naturalHeight || 1}`}
+                          preserveAspectRatio="none"
+                        >
+                          <polygon points={polygon.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={`${color}45`} stroke={color} strokeWidth="3" />
+                        </svg>
+                      ) : (
                         <div
                           key={f.id || i}
-                          className={`absolute border-2 border-white/80 ${color}`}
+                          className="absolute border-2 bg-transparent"
                           style={{
                             left: f.bbox.x * scale,
                             top: f.bbox.y * scale,
                             width: f.bbox.width * scale,
                             height: f.bbox.height * scale,
+                            borderColor: color,
                           }}
                           title={`${f.className} ${(f.confidence * 100).toFixed(0)}%`}
                         />
