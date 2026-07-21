@@ -29,30 +29,9 @@ export function InteractiveGrid({ className = "" }: { className?: string }) {
 
     const cols = 20;
     const rows = 14;
+    const segments = 30;
     const attractRadius = 220;
-    const attractStrength = 0.5;
-    const bulgeStrength = 0.75;
-    const bulgeRadius = 100;
-
-    const cells: { x: number; y: number; size: number }[] = [];
-
-    const recalcCells = () => {
-      const rect = canvas.getBoundingClientRect();
-      const cellW = rect.width / cols;
-      const cellH = rect.height / rows;
-      cells.length = 0;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          cells.push({
-            x: c * cellW + cellW / 2,
-            y: r * cellH + cellH / 2,
-            size: Math.min(cellW, cellH) * 0.28,
-          });
-        }
-      }
-    };
-
-    recalcCells();
+    const attractStrength = 0.9;
 
     const handleMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -75,72 +54,48 @@ export function InteractiveGrid({ className = "" }: { className?: string }) {
 
       const mx = mouseRef.current.x;
       const my = mouseRef.current.y;
-
-      // Draw grid lines
-      ctx.strokeStyle = "rgba(209, 213, 209, 0.12)";
-      ctx.lineWidth = 1;
       const cellW = rect.width / cols;
       const cellH = rect.height / rows;
 
-      ctx.beginPath();
-      for (let c = 1; c < cols; c++) {
-        ctx.moveTo(c * cellW, 0);
-        ctx.lineTo(c * cellW, rect.height);
-      }
-      for (let r = 1; r < rows; r++) {
-        ctx.moveTo(0, r * cellH);
-        ctx.lineTo(rect.width, r * cellH);
-      }
-      ctx.stroke();
-
-      // Draw cells
-      for (const cell of cells) {
-        const dx = mx - cell.x;
-        const dy = my - cell.y;
+      const displace = (x: number, y: number) => {
+        const dx = mx - x;
+        const dy = my - y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-
         let tx = 0;
         let ty = 0;
-        let scale = 1;
-
         if (dist < attractRadius && dist > 0) {
-          const force = 1 - dist / attractRadius;
-          const pull = force * attractStrength;
-          tx = (dx / dist) * pull * 42;
-          ty = (dy / dist) * pull * 42;
-
-          const bulge = Math.max(0, 1 - dist / bulgeRadius) * bulgeStrength;
-          scale = 1 + bulge;
+          const force = (1 - dist / attractRadius) * attractStrength;
+          tx = (dx / dist) * force * 60;
+          ty = (dy / dist) * force * 60;
         }
+        return { x: x + tx, y: y + ty };
+      };
 
-        const x = cell.x + tx;
-        const y = cell.y + ty;
-        const r = cell.size * scale;
+      ctx.strokeStyle = "rgba(209, 213, 209, 0.15)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
 
-        const glow = Math.max(0, 1 - dist / 160);
-
-        ctx.beginPath();
-        ctx.arc(x, y, r, 0, Math.PI * 2);
-        const grad = ctx.createRadialGradient(
-          x - r * 0.25,
-          y - r * 0.25,
-          r * 0.1,
-          x,
-          y,
-          r
-        );
-        grad.addColorStop(0, "rgba(255, 255, 255, 0.85)");
-        grad.addColorStop(0.45, "rgba(209, 213, 209, 0.45)");
-        grad.addColorStop(1, `rgba(15, 92, 99, ${0.12 + glow * 0.18})`);
-        ctx.fillStyle = grad;
-
-        if (glow > 0) {
-          ctx.shadowBlur = 18 + glow * 12;
-          ctx.shadowColor = `rgba(0, 243, 255, ${glow * 0.3})`;
+      for (let c = 1; c < cols; c++) {
+        const baseX = c * cellW;
+        for (let s = 0; s <= segments; s++) {
+          const y = (s / segments) * rect.height;
+          const p = displace(baseX, y);
+          if (s === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
         }
-        ctx.fill();
-        ctx.shadowBlur = 0;
       }
+
+      for (let r = 1; r < rows; r++) {
+        const baseY = r * cellH;
+        for (let s = 0; s <= segments; s++) {
+          const x = (s / segments) * rect.width;
+          const p = displace(x, baseY);
+          if (s === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+      }
+
+      ctx.stroke();
 
       rafRef.current = requestAnimationFrame(draw);
     };

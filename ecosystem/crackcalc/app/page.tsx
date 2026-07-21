@@ -139,6 +139,7 @@ export default function Page() {
   const [measureForm, setMeasureForm] = useState({ width: "", length: "", depth: "", note: "" });
   const [useTrend, setUseTrend] = useState(false);
   const [trend, setTrend] = useState({ yearlyMm: 0, yearlyPct: 0, r2: 0 });
+  const [embed, setEmbed] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("lang") as "en" | "ru" | null;
@@ -153,6 +154,7 @@ export default function Page() {
       if (w) setWidth(w);
       if (l) setLength(l);
       if (d) setDepth(d);
+      setEmbed(sp.get("embed") === "1");
     }
   }, []);
   useEffect(() => { localStorage.setItem("lang", lang); }, [lang]);
@@ -252,6 +254,7 @@ export default function Page() {
 
   return (
     <div className="min-h-screen">
+      {!embed && (
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "glass py-3" : "py-5 bg-transparent"}`}>
         <div className="container-max flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center gap-2.5 group">
@@ -288,7 +291,9 @@ export default function Page() {
           </div>
         )}
       </header>
+      )}
 
+      {!embed && (
       <section className="relative pt-40 pb-16 grid-bg overflow-hidden">
         <div className="container-max text-center">
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass mb-6 animate-fade-in">
@@ -304,8 +309,9 @@ export default function Page() {
           <p className="text-on-surface-variant text-lg max-w-2xl mx-auto animate-slide-up">{t.heroDesc}</p>
         </div>
       </section>
+      )}
 
-      <section id="calculator" className="py-16">
+      <section id="calculator" className={embed ? "py-4" : "py-16"}>
         <div className="container-max max-w-4xl">
           <div className="flex flex-wrap gap-2 mb-6 justify-center">
             {(Object.keys(standards) as ("gost" | "aci" | "en")[]).map((key) => (
@@ -395,6 +401,7 @@ export default function Page() {
                   {gostRefs.map((r, i) => <p key={i} className="text-xs text-on-surface-variant mb-1">• {r[lang]}</p>)}
                 </div>
               </div>
+              {!embed && (
               <div className="flex flex-col sm:flex-row gap-3">
                 <a href="/dashboard/tools/concretemix" target="_blank" rel="noopener noreferrer" className="btn-primary flex-1 flex items-center justify-center gap-2 text-sm">
                   {t.repairMix} <ArrowRight className="w-4 h-4" />
@@ -403,12 +410,14 @@ export default function Page() {
                   {t.uploadPhoto} <ArrowRight className="w-4 h-4" />
                 </a>
               </div>
+              )}
             </div>
           )}
         </div>
       </section>
 
       {/* Monitoring Section */}
+      {!embed && (
       <section id="monitoring" className="py-16 grid-bg">
         <div className="container-max max-w-4xl">
           <h2 className="font-display text-3xl font-bold text-on-surface text-center mb-3">{t.monitoring}</h2>
@@ -508,7 +517,9 @@ export default function Page() {
           </div>
         </div>
       </section>
+      )}
 
+      {!embed && (
       <section id="how-it-works" className="py-20 grid-bg">
         <div className="container-max max-w-5xl">
           <h2 className="font-display text-3xl font-bold text-on-surface text-center mb-12">{t.howItWorks}</h2>
@@ -523,7 +534,9 @@ export default function Page() {
           </div>
         </div>
       </section>
+      )}
 
+      {!embed && (
       <section id="faq" className="py-20">
         <div className="container-max max-w-3xl">
           <h2 className="font-display text-3xl font-bold text-on-surface text-center mb-12">{t.faqTitle}</h2>
@@ -542,7 +555,9 @@ export default function Page() {
           </div>
         </div>
       </section>
+      )}
 
+      {!embed && (
       <section id="tools" className="py-20 grid-bg">
         <div className="container-max max-w-4xl">
           <h2 className="font-display text-3xl font-bold text-on-surface text-center mb-12">{t.toolsTitle}</h2>
@@ -560,7 +575,9 @@ export default function Page() {
           </div>
         </div>
       </section>
+      )}
 
+      {!embed && (
       <footer className="py-12 border-t border-outline-variant/10">
         <div className="container-max max-w-4xl text-center">
           <div className="flex items-center justify-center gap-2.5 mb-4">
@@ -583,6 +600,7 @@ export default function Page() {
           </div>
         </div>
       </footer>
+      )}
     </div>
   );
 }

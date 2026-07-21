@@ -222,7 +222,7 @@ export default function ProjectsPage() {
                 </span>
               </div>
               <p className="text-[11px] text-on-surface-variant mt-md font-mono-data">
-                {p.objectType ?? "Unspecified"} · Created {new Date(p.createdAt).toLocaleDateString()}
+                {p.objectType ?? "Unspecified"} · Created {new Date(p.createdAt).toISOString().slice(0,10)}
               </p>
               <div className="mt-md pt-sm border-t border-outline-variant flex justify-end">
                 <button

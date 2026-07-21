@@ -1,0 +1,155 @@
+"use client";
+
+import { useRef, useState } from "react";
+
+interface FindingLike {
+  id: string;
+  className: string;
+  confidence: number;
+  severity: string;
+  bbox: { x: number; y: number; width: number; height: number };
+  widthMm: number | null;
+  heightMm: number | null;
+}
+
+const TOOLS: Record<string, { name: string; url: string }> = {
+  crackcalc: { name: "CrackCalc", url: "/tools-assets/crackcalc" },
+  loadbear: { name: "LoadBear", url: "/tools-assets/loadbear" },
+  concretemix: { name: "ConcreteMix", url: "/tools-assets/concretemix" },
+  rebardesign: { name: "RebarDesign", url: "/tools-assets/rebardesign" },
+  normbase: { name: "NormBase", url: "/tools-assets/normbase" },
+};
+
+const SEV_LABEL: Record<string, string> = {
+  CRITICAL: "Critical", HIGH: "High", MEDIUM: "Medium", LOW: "Low",
+};
+
+export function ToolOverlay({
+  tool,
+  search,
+  imageUrl,
+  finding,
+  onClose,
+}: {
+  tool: string;
+  search?: string;
+  imageUrl: string;
+  finding: FindingLike;
+  onClose: () => void;
+}) {
+  const meta = TOOLS[tool] ?? { name: tool, url: "" };
+  const imgRef = useRef<HTMLImageElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [loaded, setLoaded] = useState(false);
+
+  const onImgLoad = () => {
+    if (imgRef.current && wrapRef.current) {
+      setScale(wrapRef.current.clientWidth / imgRef.current.naturalWidth);
+    }
+  };
+
+  const sp = new URLSearchParams(search ? search.replace(/^\?/, "") : "");
+  sp.set("embed", "1");
+  const src = meta.url ? `${meta.url}?${sp.toString()}` : "";
+
+  const sev = (finding.severity || "low").toUpperCase();
+  const color =
+    sev === "CRITICAL" ? "bg-red-500/50" :
+    sev === "HIGH" ? "bg-orange-500/50" :
+    sev === "MEDIUM" ? "bg-amber-500/50" :
+    "bg-emerald-500/50";
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+      <div
+        className="relative bg-surface-container-lowest border border-outline-variant rounded-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-md py-sm border-b border-outline-variant">
+          <div className="flex items-center gap-md">
+            <button onClick={onClose} className="text-on-surface-variant hover:text-primary flex items-center gap-xs font-label-caps text-[11px]">
+              <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+              BACK
+            </button>
+            <span className="text-outline-variant">/</span>
+            <h3 className="font-headline-sm text-headline-sm">{meta.name}</h3>
+          </div>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
+          {/* Left: image + context */}
+          <div className="lg:col-span-1 border-r border-outline-variant overflow-y-auto p-md bg-surface-container-low">
+            <div ref={wrapRef} className="relative rounded-lg overflow-hidden bg-surface-container mb-md">
+              <img
+                ref={imgRef}
+                src={imageUrl}
+                alt="Finding"
+                className="w-full h-auto block"
+                onLoad={onImgLoad}
+              />
+              <div
+                className={`absolute border-2 border-white/80 ${color}`}
+                style={{
+                  left: finding.bbox.x * scale,
+                  top: finding.bbox.y * scale,
+                  width: finding.bbox.width * scale,
+                  height: finding.bbox.height * scale,
+                }}
+                title={`${finding.className} ${(finding.confidence * 100).toFixed(0)}%`}
+              />
+            </div>
+
+            <div className="space-y-sm">
+              <p className="font-body-sm text-body-sm text-on-surface-variant uppercase">Measured finding</p>
+              <p className="font-headline-sm text-headline-sm capitalize">{finding.className}</p>
+              <div className="grid grid-cols-2 gap-sm text-sm">
+                <div className="p-sm bg-surface-container-lowest border border-outline-variant rounded">
+                  <p className="text-[10px] text-on-surface-variant">WIDTH</p>
+                  <p className="font-mono-data font-bold">{finding.widthMm ? `${finding.widthMm.toFixed(2)} mm` : "—"}</p>
+                </div>
+                <div className="p-sm bg-surface-container-lowest border border-outline-variant rounded">
+                  <p className="text-[10px] text-on-surface-variant">LENGTH</p>
+                  <p className="font-mono-data font-bold">{finding.heightMm ? `${finding.heightMm.toFixed(2)} mm` : "—"}</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-on-surface-variant">
+                Confidence: {(finding.confidence * 100).toFixed(0)}% · Severity: {SEV_LABEL[sev] || sev}
+              </p>
+              <button
+                onClick={onClose}
+                className="mt-md w-full py-sm bg-surface-container text-on-surface-variant font-label-caps text-label-caps rounded-lg border border-outline-variant hover:bg-primary/5 hover:text-primary transition-colors"
+              >
+                ← Return to results
+              </button>
+            </div>
+          </div>
+
+          {/* Right: tool iframe */}
+          <div className="lg:col-span-2 relative bg-surface-container-lowest">
+            {!loaded && (
+              <div className="absolute inset-0 flex items-center justify-center z-10">
+                <span className="material-symbols-outlined text-primary text-[48px] animate-spin">progress_activity</span>
+              </div>
+            )}
+            {src && (
+              <iframe
+                src={src}
+                className="w-full h-full border-0"
+                title={meta.name}
+                onLoad={() => setLoaded(true)}
+                allow="fullscreen"
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

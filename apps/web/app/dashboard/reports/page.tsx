@@ -155,7 +155,7 @@ export default function ReportsPage() {
             <div key={r.id} className="bg-surface-container-lowest border border-outline-variant p-lg hover:border-primary transition-colors flex flex-col">
               <div className="flex items-start justify-between mb-md">
                 <span className="material-symbols-outlined text-primary text-[32px]">picture_as_pdf</span>
-                <span className="font-label-caps text-[10px] text-on-surface-variant">{new Date(r.createdAt).toLocaleDateString()}</span>
+                <span className="font-label-caps text-[10px] text-on-surface-variant">{new Date(r.createdAt).toISOString().slice(0,10)}</span>
               </div>
               <h3 className="font-title-sm text-title-sm mb-xs">{r.title}</h3>
               <p className="font-body-sm text-body-sm text-on-surface-variant mb-md flex-1">{r.summary ?? "No summary available."}</p>

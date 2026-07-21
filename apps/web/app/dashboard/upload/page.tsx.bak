@@ -1,35 +1,13 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { ToolOverlay } from "@/app/components/ToolOverlay";
-
-interface Finding {
-  id: string;
-  className: string;
-  confidence: number;
-  severity: string;
-  bbox: { x: number; y: number; width: number; height: number };
-  widthMm: number | null;
-  heightMm: number | null;
-}
 
 interface Project {
   id: string;
   name: string;
   siteId: string | null;
 }
-
-const SEV_COLORS: Record<string, string> = {
-  CRITICAL: "bg-red-100 text-red-700 border-red-300",
-  HIGH: "bg-orange-100 text-orange-700 border-orange-300",
-  MEDIUM: "bg-amber-100 text-amber-700 border-amber-300",
-  LOW: "bg-emerald-100 text-emerald-700 border-emerald-300",
-};
-
-const SEV_LABEL: Record<string, string> = {
-  CRITICAL: "Critical", HIGH: "High", MEDIUM: "Medium", LOW: "Low",
-};
 
 interface UploadedFile {
   file: File;
@@ -40,11 +18,7 @@ interface UploadedFile {
   previewUrl: string;
   assetId?: string;
   error?: string;
-  analysis?: {
-    analysisId: string;
-    findingsCount: number;
-    summary: { total: number; high: number; medium: number; low: number; other?: number };
-  } | null;
+  analysis?: { findingsCount: number; summary: { total: number; high: number; medium: number; low: number; other?: number } } | null;
 }
 
 export default function UploadPage() {
@@ -56,14 +30,6 @@ export default function UploadPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [resultMessage, setResultMessage] = useState<string | null>(null);
-
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-  const [detail, setDetail] = useState<{ findings: Finding[]; blobUrl: string } | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [activeTool, setActiveTool] = useState<{ tool: string; search: string; finding: Finding } | null>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -85,13 +51,6 @@ export default function UploadPage() {
     }));
     setFiles((prev) => [...prev, ...newFiles]);
   }, []);
-
-  const crackcalcSearch = (f: Finding) => {
-    const params = new URLSearchParams();
-    if (f.widthMm) params.set("width", f.widthMm.toFixed(2));
-    if (f.heightMm) params.set("length", f.heightMm.toFixed(2));
-    return params.toString() ? `?${params.toString()}` : "";
-  };
 
   async function uploadAll() {
     if (!selectedProject || files.length === 0) return;
@@ -132,12 +91,8 @@ export default function UploadPage() {
           throw new Error(err.error || `Analysis failed: ${analysisRes.status}`);
         }
         const analysisData = await analysisRes.json();
-        analysisResult = {
-          analysisId: analysisData.analysisId,
-          findingsCount: analysisData.findingsCount ?? 0,
-          summary: analysisData.summary ?? { total: 0, high: 0, medium: 0, low: 0, other: 0 },
-        };
-        totalFindings += analysisResult.findingsCount;
+        analysisResult = analysisData;
+        totalFindings += analysisData?.findingsCount ?? 0;
         setFiles((prev) => prev.map((f, idx) => (idx === i ? { ...f, status: "done", analysis: analysisResult } : f)));
         done++;
       } catch (e) {
@@ -151,40 +106,6 @@ export default function UploadPage() {
     setIsProcessing(false);
     setResultMessage(`Done: ${done} · Failed: ${failed} · Defects found: ${totalFindings}`);
   }
-
-  async function openResult(index: number) {
-    setSelectedIndex(index);
-    const file = files[index];
-    if (!file.analysis?.analysisId) return;
-    setDetailLoading(true);
-    setDetail(null);
-    try {
-      const res = await fetch(`/api/analyses/${file.analysis.analysisId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setDetail({
-          findings: data.analysis?.findings ?? [],
-          blobUrl: data.analysis?.asset?.blobUrl ?? file.url ?? "",
-        });
-      }
-    } finally {
-      setDetailLoading(false);
-    }
-  }
-
-  function closeResult() {
-    setSelectedIndex(null);
-    setDetail(null);
-    setScale(1);
-  }
-
-  const onImgLoad = () => {
-    if (imgRef.current && wrapRef.current) {
-      setScale(wrapRef.current.clientWidth / imgRef.current.naturalWidth);
-    }
-  };
-
-  const selectedFile = selectedIndex !== null ? files[selectedIndex] : null;
 
   return (
     <div className="animate-fade-in flex flex-col h-[calc(100vh-4rem)]">
@@ -255,11 +176,7 @@ export default function UploadPage() {
             {files.length > 0 && (
               <div className="mt-xl grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-gutter overflow-y-auto">
                 {files.map((f, i) => (
-                  <div
-                    key={i}
-                    className={`bg-surface-container-lowest border border-outline-variant p-xs rounded shadow-sm ${f.status === "done" ? "cursor-pointer hover:border-primary" : ""}`}
-                    onClick={() => f.status === "done" && openResult(i)}
-                  >
+                  <div key={i} className="bg-surface-container-lowest border border-outline-variant p-xs rounded shadow-sm">
                     <div className="aspect-square bg-surface-container rounded-xs overflow-hidden flex items-center justify-center relative">
                       {f.previewUrl ? (
                         <img src={f.previewUrl} alt={f.name} className="w-full h-full object-cover" />
@@ -401,115 +318,6 @@ export default function UploadPage() {
             </section>
           </aside>
         </div>
-      )}
-
-      {/* Result Viewer Modal */}
-      {selectedIndex !== null && selectedFile && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={closeResult}>
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-lg" onClick={(e) => e.stopPropagation()}>
-            <button onClick={closeResult} className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface z-10">
-              <span className="material-symbols-outlined">close</span>
-            </button>
-
-            <h3 className="font-headline-md text-headline-md mb-md">{selectedFile.name}</h3>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
-              <div ref={wrapRef} className="relative rounded-lg overflow-hidden bg-surface-container">
-                {detailLoading ? (
-                  <div className="aspect-square flex items-center justify-center">
-                    <span className="material-symbols-outlined text-primary text-[48px] animate-spin">progress_activity</span>
-                  </div>
-                ) : (
-                  <>
-                    <img
-                      ref={imgRef}
-                      src={detail?.blobUrl ?? selectedFile.url ?? selectedFile.previewUrl}
-                      alt={selectedFile.name}
-                      className="w-full h-auto block"
-                      onLoad={onImgLoad}
-                    />
-                    {detail && detail.findings.map((f, i) => {
-                      const sev = (f.severity || "low").toUpperCase();
-                      const color = sev === "CRITICAL" ? "bg-red-500/50" : sev === "HIGH" ? "bg-orange-500/50" : sev === "MEDIUM" ? "bg-amber-500/50" : "bg-emerald-500/50";
-                      return (
-                        <div
-                          key={f.id || i}
-                          className={`absolute border-2 border-white/80 ${color}`}
-                          style={{
-                            left: f.bbox.x * scale,
-                            top: f.bbox.y * scale,
-                            width: f.bbox.width * scale,
-                            height: f.bbox.height * scale,
-                          }}
-                          title={`${f.className} ${(f.confidence * 100).toFixed(0)}%`}
-                        />
-                      );
-                    })}
-                  </>
-                )}
-              </div>
-
-              <div className="space-y-md">
-                {detailLoading ? (
-                  <div className="flex items-center justify-center py-10">
-                    <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
-                  </div>
-                ) : detail ? (
-                  <>
-                    <div className="p-md bg-surface-container border border-outline-variant rounded-lg">
-                      <p className="font-label-caps text-label-caps text-on-surface-variant">DEFECTS FOUND</p>
-                      <p className="text-[32px] font-bold mt-xs">{detail.findings.length}</p>
-                    </div>
-
-                    {detail.findings.length === 0 ? (
-                      <p className="text-sm text-on-surface-variant text-center py-8">No defects detected on this photo.</p>
-                    ) : (
-                      <div className="space-y-sm max-h-[360px] overflow-y-auto pr-xs">
-                        {detail.findings.map((f) => {
-                          const sev = (f.severity || "low").toUpperCase();
-                          const sevClass = SEV_COLORS[sev] || SEV_COLORS.LOW;
-                          return (
-                            <div key={f.id} className="p-sm bg-surface-container-lowest border border-outline-variant rounded flex flex-wrap items-start justify-between gap-sm">
-                              <div className="flex-1 min-w-0">
-                                <p className="font-body-sm font-bold capitalize truncate">{f.className}</p>
-                                <p className="text-[11px] text-on-surface-variant">
-                                  {Math.round(f.bbox.width)}×{Math.round(f.bbox.height)} px · {(f.confidence * 100).toFixed(0)}%
-                                  {f.widthMm ? ` · ${f.widthMm.toFixed(1)} mm` : ""}
-                                  {f.heightMm ? ` / ${f.heightMm.toFixed(1)} mm` : ""}
-                                </p>
-                              </div>
-                              <span className={`text-[10px] font-bold px-sm py-xs rounded border ${sevClass}`}>{SEV_LABEL[sev] || sev}</span>
-                              {f.className.toLowerCase().includes("crack") && (
-                                <button
-                                  onClick={() => setActiveTool({ tool: "crackcalc", search: crackcalcSearch(f), finding: f })}
-                                  className="text-primary text-[11px] font-bold hover:underline whitespace-nowrap"
-                                >
-                                  CrackCalc
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-sm text-on-surface-variant text-center py-8">Could not load analysis details.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {activeTool && selectedFile && (
-        <ToolOverlay
-          tool={activeTool.tool}
-          search={activeTool.search}
-          imageUrl={detail?.blobUrl ?? selectedFile.url ?? selectedFile.previewUrl}
-          finding={activeTool.finding}
-          onClose={() => setActiveTool(null)}
-        />
       )}
     </div>
   );

@@ -74,7 +74,7 @@ export default function AnalysisPage() {
                 {a.confidence !== null && <span>{(a.confidence * 100).toFixed(0)}% conf.</span>}
               </div>
               <p className="text-[11px] text-on-surface-variant mt-xs font-mono-data">
-                {new Date(a.createdAt).toLocaleString()}
+                {new Date(a.createdAt).toISOString().slice(0,16).replace("T", " ")}
               </p>
             </Link>
           ))}

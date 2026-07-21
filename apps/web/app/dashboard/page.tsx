@@ -82,7 +82,7 @@ export default function DashboardPage() {
             )}
             <p className="font-label-caps text-label-caps text-on-surface-variant mb-md">{kpi.label}</p>
             <div className="flex justify-between items-baseline">
-              <h3 className="text-[32px] font-bold text-on-surface">{kpi.value.toLocaleString()}</h3>
+              <h3 className="text-[32px] font-bold text-on-surface">{kpi.value.toLocaleString("en-US")}</h3>
               <span className={`text-${kpi.color} font-mono-data text-[12px]`}>{kpi.trend}</span>
             </div>
             <div className="w-full bg-surface-container h-1 mt-md">
@@ -163,13 +163,13 @@ export default function DashboardPage() {
                     key={i}
                     className={`flex-1 ${a.count === max ? "bg-primary" : "bg-primary/20"} hover:bg-primary transition-all cursor-help`}
                     style={{ height: `${(a.count / max) * 100}%` }}
-                    title={`${new Date(a.date).toLocaleDateString()}: ${a.count} analyses`}
+                    title={`${new Date(a.date).toISOString().slice(0,10)}: ${a.count} analyses`}
                   />
                 ));
               })()}
             </div>
             <div className="absolute -bottom-6 left-0 right-0 flex justify-between font-label-caps text-[10px] text-on-surface-variant">
-              {data?.activity?.map((a) => new Date(a.date).toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()) ?? ["MON","TUE","WED","THU","FRI","SAT","SUN"]}
+              {data?.activity?.map((a) => ["SUN","MON","TUE","WED","THU","FRI","SAT"][new Date(a.date).getUTCDay()]) ?? ["MON","TUE","WED","THU","FRI","SAT","SUN"]}
             </div>
           </div>
           <div className="mt-lg pt-lg border-t border-outline-variant flex gap-xl">
@@ -226,7 +226,7 @@ export default function DashboardPage() {
                     <td className="px-lg py-lg">{p.objectType ?? "—"}</td>
                     <td className="px-lg py-lg font-mono-data">{p._count.assets}</td>
                     <td className="px-lg py-lg text-on-surface-variant">
-                      {new Date(p.updatedAt).toLocaleDateString()}
+                      {new Date(p.updatedAt).toISOString().slice(0,10)}
                     </td>
                     <td className="px-lg py-lg">
                       <span className={`px-sm py-xs font-label-caps text-[10px] ${

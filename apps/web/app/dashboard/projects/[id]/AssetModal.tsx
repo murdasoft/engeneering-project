@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { ToolOverlay } from "@/app/components/ToolOverlay";
 
 interface Asset {
   id: string;
@@ -72,6 +73,7 @@ export default function AssetModal({
   const [showOther, setShowOther] = useState(true);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewNote, setReviewNote] = useState("");
+  const [activeTool, setActiveTool] = useState<{ tool: string; search: string; finding: any } | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -154,14 +156,15 @@ export default function AssetModal({
     return Array.from(set).sort();
   }, [analysis]);
 
-  const crackcalcUrl = (item: any) => {
+  const crackcalcSearch = (item: any) => {
     const width = item.widthMm ?? 0;
     const length = item.heightMm ?? 0;
     const params = new URLSearchParams();
     if (width > 0) params.set("width", String(width.toFixed(2)));
     if (length > 0) params.set("length", String(length.toFixed(2)));
-    return `/dashboard/tools/crackcalc${params.toString() ? `?${params.toString()}` : ""}`;
+    return params.toString() ? `?${params.toString()}` : "";
   };
+  const crackcalcUrl = (item: any) => `/dashboard/tools/crackcalc${crackcalcSearch(item)}`;
 
   const completedAnalysis = asset.analyses.find((a) => a.status === "COMPLETED");
 
@@ -175,7 +178,7 @@ export default function AssetModal({
 
         <h3 className="font-headline-md text-headline-md mb-md">{asset.filename}</h3>
         <p className="font-body-sm text-on-surface-variant mb-lg">
-          Uploaded {new Date(asset.createdAt).toLocaleString()}
+          Uploaded {new Date(asset.createdAt).toISOString().slice(0,16).replace("T", " ")}
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
@@ -252,7 +255,17 @@ export default function AssetModal({
                     <span className="material-symbols-outlined text-primary text-[32px] animate-spin">progress_activity</span>
                   </div>
                 ) : allItems.length === 0 ? (
-                  <p className="text-sm text-on-surface-variant text-center py-8">No findings match the current filters.</p>
+                  <div className="text-center py-8">
+                    {analysis && analysis.findings.length === 0 && classFilter === "all" && severityFilter === "all" && showOther ? (
+                      <>
+                        <span className="material-symbols-outlined text-outline-variant text-[40px]">search_off</span>
+                        <p className="text-sm font-bold text-on-surface mt-md">No defects detected</p>
+                        <p className="text-xs text-on-surface-variant mt-xs">Try a higher-resolution photo or adjust the pixel scale.</p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-on-surface-variant">No findings match the current filters.</p>
+                    )}
+                  </div>
                 ) : (
                   <div className="space-y-sm max-h-[360px] overflow-y-auto pr-xs">
                     {allItems.map((d, i) => {
@@ -271,14 +284,12 @@ export default function AssetModal({
                             {isOther ? "OTHER" : SEV_LABEL[sev] || sev}
                           </span>
                           {!isOther && d.class.toLowerCase().includes("crack") && (
-                            <a
-                              href={crackcalcUrl(d)}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              onClick={() => setActiveTool({ tool: "crackcalc", search: crackcalcSearch(d), finding: d })}
                               className="text-primary text-[11px] font-bold hover:underline whitespace-nowrap"
                             >
                               CrackCalc
-                            </a>
+                            </button>
                           )}
                           {!isOther && (
                             <button
@@ -332,6 +343,24 @@ export default function AssetModal({
           </div>
         </div>
       </div>
+
+      {activeTool && (
+        <ToolOverlay
+          tool={activeTool.tool}
+          search={activeTool.search}
+          imageUrl={asset.blobUrl}
+          finding={{
+            id: activeTool.finding.id,
+            className: activeTool.finding.class,
+            confidence: activeTool.finding.confidence,
+            severity: activeTool.finding.severity,
+            bbox: activeTool.finding.bbox,
+            widthMm: activeTool.finding.widthMm,
+            heightMm: activeTool.finding.heightMm,
+          }}
+          onClose={() => setActiveTool(null)}
+        />
+      )}
     </div>
   );
 }
