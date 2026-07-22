@@ -1,3 +1,4 @@
+import React from "react";
 import {
   Document,
   Page,
@@ -5,29 +6,19 @@ import {
   View,
   Image,
   StyleSheet,
-  Font,
   Link,
 } from "@react-pdf/renderer";
 
-Font.register({
-  family: "Inter",
-  fonts: [
-    { src: "https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2", fontWeight: 400 },
-    { src: "https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2", fontWeight: 600 },
-    { src: "https://fonts.gstatic.com/s/inter/v13/UcC73FwrK3iLTeHuS_fvQtMwCp50KnMa1ZL7.woff2", fontWeight: 700 },
-  ],
-});
-
 const styles = StyleSheet.create({
   page: {
-    fontFamily: "Inter",
+    fontFamily: "Helvetica",
     fontSize: 10,
     color: "#131d1d",
     backgroundColor: "#ffffff",
     padding: 40,
   },
   coverPage: {
-    fontFamily: "Inter",
+    fontFamily: "Helvetica",
     fontSize: 10,
     color: "#ffffff",
     backgroundColor: "#004349",
@@ -323,6 +314,7 @@ interface ReportData {
     id: string;
     filename: string;
     blobUrl: string;
+    dataUrl?: string | null;
     mimeType: string;
     fileSize: number;
     createdAt: Date;
@@ -606,11 +598,13 @@ export function createReportDocument(data: ReportData) {
         ) : (
           data.assets.map((asset, i) => (
             <View key={asset.id} style={styles.imageCard} wrap={false}>
-              <Image
-                src={asset.blobUrl}
-                style={styles.image}
-                cache={true}
-              />
+              {asset.dataUrl ? (
+                <Image src={asset.dataUrl} style={styles.image} />
+              ) : (
+                <View style={{ ...styles.image, backgroundColor: "#e4f0f0", justifyContent: "center", alignItems: "center" }}>
+                  <Text style={{ color: "#6f797a", fontSize: 9 }}>Image not available</Text>
+                </View>
+              )}
               <View style={styles.imageInfo}>
                 <Text style={styles.imageFilename}>
                   Photo {i + 1}: {asset.filename}

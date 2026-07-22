@@ -5,6 +5,23 @@ import { prisma } from "@/lib/prisma";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createReportDocument } from "@/lib/pdf-report";
 
+async function fetchImageAsDataUrl(blobUrl: string, mimeType: string): Promise<string | null> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const res = await fetch(blobUrl, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length === 0) return null;
+    const b64 = buffer.toString("base64");
+    const type = mimeType && mimeType.includes("/") ? mimeType : "image/jpeg";
+    return `data:${type};base64,${b64}`;
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
 
@@ -69,6 +86,13 @@ export async function POST(req: Request) {
     rejectedCount: allFindings.filter((f) => f.reviewStatus === "REJECTED").length,
   };
 
+  const assetsWithDataUrls = await Promise.all(
+    project.assets.map(async (a) => ({
+      ...a,
+      dataUrl: await fetchImageAsDataUrl(a.blobUrl, a.mimeType),
+    }))
+  );
+
   const reportData = {
     project: {
       name: project.name,
@@ -83,10 +107,11 @@ export async function POST(req: Request) {
       name: user?.name ?? null,
       email: user?.email ?? session.user!.email!,
     },
-    assets: project.assets.map((a) => ({
+    assets: assetsWithDataUrls.map((a) => ({
       id: a.id,
       filename: a.filename,
       blobUrl: a.blobUrl,
+      dataUrl: a.dataUrl,
       mimeType: a.mimeType,
       fileSize: a.fileSize,
       createdAt: a.createdAt,
@@ -116,6 +141,18 @@ export async function POST(req: Request) {
   const reportTitle = `Inspection Report — ${project.name}`;
   const summary = `${stats.totalFindings} defects found (${stats.criticalCount} critical, ${stats.highCount} high) across ${stats.totalAssets} photos.`;
 
+  let pdfBuffer: Buffer;
+  try {
+    const doc = createReportDocument(reportData);
+    pdfBuffer = await renderToBuffer(doc);
+  } catch (e: any) {
+    console.error("[report:generate] PDF render failed:", e);
+    return NextResponse.json(
+      { error: "Failed to render PDF", detail: e?.message || "Unknown error" },
+      { status: 500 }
+    );
+  }
+
   await prisma.report.create({
     data: {
       title: reportTitle,
@@ -124,8 +161,6 @@ export async function POST(req: Request) {
     },
   });
 
-  const doc = createReportDocument(reportData);
-  const pdfBuffer = await renderToBuffer(doc);
   const uint8 = new Uint8Array(pdfBuffer);
 
   return new NextResponse(uint8, {
