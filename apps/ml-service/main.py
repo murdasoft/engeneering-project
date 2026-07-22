@@ -263,6 +263,76 @@ def _box_area_ratio(box: list, img_array: np.ndarray) -> float:
     return _box_area(box) / image_area if image_area > 0 else 1.0
 
 
+def _is_full_width_top_region(box: list, img_array: np.ndarray) -> bool:
+    image_h, image_w = img_array.shape[:2]
+    box_w = max(0, box[2] - box[0])
+    box_h = max(0, box[3] - box[1])
+    return box[1] <= image_h * 0.03 and box_w >= image_w * 0.90 and box_h <= image_h * 0.25
+
+
+def _extract_crack_polygon(img_array: np.ndarray, box: list) -> Optional[list]:
+    image_h, image_w = img_array.shape[:2]
+    x1 = max(0, int(math.floor(box[0])))
+    y1 = max(0, int(math.floor(box[1])))
+    x2 = min(image_w, int(math.ceil(box[2])))
+    y2 = min(image_h, int(math.ceil(box[3])))
+    if x2 - x1 < 20 or y2 - y1 < 20:
+        return None
+
+    region = img_array[y1:y2, x1:x2]
+    gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY) if len(region.shape) == 3 else region
+    threshold = float(np.clip(np.percentile(gray, 8), 35, 90))
+    dark_mask = (gray <= threshold).astype(np.uint8)
+    component_count, labels, stats, centers = cv2.connectedComponentsWithStats(dark_mask, 8)
+    if component_count <= 1:
+        return None
+
+    component_ids = sorted(
+        range(1, component_count),
+        key=lambda component_id: stats[component_id, cv2.CC_STAT_AREA],
+        reverse=True,
+    )
+    seed_id = component_ids[0]
+    min_seed_area = max(80, int(region.shape[0] * region.shape[1] * 0.002))
+    if stats[seed_id, cv2.CC_STAT_AREA] < min_seed_area:
+        return None
+
+    seed_y, seed_x = np.where(labels == seed_id)
+    seed_points = np.column_stack([seed_x, seed_y]).astype(np.float32)
+    vx, vy, px, py = cv2.fitLine(seed_points, cv2.DIST_L2, 0, 0.01, 0.01).reshape(-1)
+    diagonal = math.hypot(region.shape[1], region.shape[0])
+    max_distance = max(16.0, diagonal * 0.035)
+
+    selected_points = []
+    for component_id in component_ids:
+        if stats[component_id, cv2.CC_STAT_AREA] < 40:
+            continue
+        center_x, center_y = centers[component_id]
+        distance = abs(vy * (center_x - px) - vx * (center_y - py))
+        if distance > max_distance:
+            continue
+        component_y, component_x = np.where(labels == component_id)
+        selected_points.append(np.column_stack([component_x + x1, component_y + y1]))
+
+    if not selected_points:
+        return None
+
+    points = np.vstack(selected_points).astype(np.int32)
+    if np.ptp(points[:, 0]) < (x2 - x1) * 0.25 and np.ptp(points[:, 1]) < (y2 - y1) * 0.25:
+        return None
+
+    hull = cv2.convexHull(points)
+    hull_area = cv2.contourArea(hull)
+    box_area = max(1, (x2 - x1) * (y2 - y1))
+    if hull_area < box_area * 0.001 or hull_area > box_area * 0.35:
+        return None
+
+    polygon = cv2.approxPolyDP(hull, max(2.0, diagonal * 0.003), True)
+    if len(polygon) < 3:
+        return None
+    return [[float(point[0][0]), float(point[0][1])] for point in polygon]
+
+
 def _intersection_over_smaller(box_a: list, box_b: list) -> float:
     x1 = max(box_a[0], box_b[0])
     y1 = max(box_a[1], box_b[1])
@@ -421,25 +491,27 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                             continue
                         if not _aspect_ratio_ok(box):
                             continue
-                        if _box_area(box) < 400:
+                        if _box_area(box) < 400 or _is_full_width_top_region(box, img_array):
                             continue
 
-                        # Check overlap with non-crack objects
                         overlaps_non_crack = False
-                        for nc_box, nc_name in non_crack_objects:
+                        for nc_box, nc_conf, nc_name in non_crack_objects:
                             if compute_iou(box, nc_box) > 0.3:
                                 overlaps_non_crack = True
                                 break
                         if overlaps_non_crack:
                             continue
 
-                        # CV validation
                         is_valid, cv_score = _validate_crack_region(img_array, box)
                         if not is_valid:
                             continue
 
+                        polygon = _extract_crack_polygon(img_array, box)
+                        if _box_area_ratio(box, img_array) > 0.70 and polygon is None:
+                            continue
+
                         adjusted_conf = conf * (0.7 + cv_score * 0.3)
-                        fallback_detections.append((box, adjusted_conf, cls_name, None))
+                        fallback_detections.append((box, adjusted_conf, cls_name, polygon))
             except Exception:
                 pass
         all_entries = primary_detections + secondary_detections + fallback_detections
