@@ -163,7 +163,7 @@ export default function DashboardPage() {
                     key={i}
                     className={`flex-1 ${a.count === max ? "bg-primary" : "bg-primary/20"} hover:bg-primary transition-all cursor-help`}
                     style={{ height: `${(a.count / max) * 100}%` }}
-                    title={`${new Date(a.date).toISOString().slice(0,10)}: ${a.count} analyses`}
+                    title={`${a.date.slice(0,10)}: ${a.count} analyses`}
                   />
                 ));
               })()}
@@ -226,7 +226,7 @@ export default function DashboardPage() {
                     <td className="px-lg py-lg">{p.objectType ?? "—"}</td>
                     <td className="px-lg py-lg font-mono-data">{p._count.assets}</td>
                     <td className="px-lg py-lg text-on-surface-variant">
-                      {new Date(p.updatedAt).toISOString().slice(0,10)}
+                      {p.updatedAt.slice(0,10)}
                     </td>
                     <td className="px-lg py-lg">
                       <span className={`px-sm py-xs font-label-caps text-[10px] ${

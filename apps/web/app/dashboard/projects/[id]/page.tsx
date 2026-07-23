@@ -382,7 +382,7 @@ export default function ProjectDetailPage() {
                   <div>
                     <p className="font-body-md font-bold">{report.title}</p>
                     <p className="text-[11px] text-on-surface-variant font-mono-data">
-                      {new Date(report.createdAt).toISOString().slice(0,16).replace("T", " ")}
+                      {report.createdAt.slice(0,16).replace("T", " ")}
                     </p>
                   </div>
                 </div>

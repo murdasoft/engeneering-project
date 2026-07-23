@@ -178,7 +178,7 @@ export default function AssetModal({
 
         <h3 className="font-headline-md text-headline-md mb-md">{asset.filename}</h3>
         <p className="font-body-sm text-on-surface-variant mb-lg">
-          Uploaded {new Date(asset.createdAt).toISOString().slice(0,16).replace("T", " ")}
+          Uploaded {asset.createdAt.slice(0,16).replace("T", " ")}
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
