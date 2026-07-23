@@ -187,7 +187,7 @@ export default function RegisterPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="font-label-caps text-label-caps text-on-surface-variant block mb-2">
                   COMPANY (OPTIONAL)

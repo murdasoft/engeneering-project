@@ -115,7 +115,7 @@ export default function SettingsPage() {
               placeholder="+7 777 123 45 67"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="font-label-caps text-label-caps text-on-surface-variant block mb-2">COMPANY</label>
               <input

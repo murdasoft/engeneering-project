@@ -154,20 +154,20 @@ export default function ProjectDetailPage() {
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <header className="flex justify-between items-start mb-xl">
+      <header className="flex flex-col md:flex-row md:justify-between md:items-start gap-md mb-xl">
         <div>
           <Link href="/dashboard/projects" className="flex items-center gap-xs text-on-surface-variant hover:text-primary font-label-caps text-[11px] mb-xs transition-colors">
             <span className="material-symbols-outlined text-[18px]">arrow_back</span>
             ALL PROJECTS
           </Link>
           <h2 className="font-display-lg text-display-lg">{project.name}</h2>
-          <div className="flex gap-lg mt-xs text-on-surface-variant font-body-sm text-body-sm">
+          <div className="flex flex-wrap gap-lg mt-xs text-on-surface-variant font-body-sm text-body-sm">
             <span className="flex items-center gap-xs"><span className="material-symbols-outlined text-[16px]">badge</span>{project.siteId ?? "—"}</span>
             <span className="flex items-center gap-xs"><span className="material-symbols-outlined text-[16px]">apartment</span>{project.objectType ?? "Unspecified"}</span>
             <span className="flex items-center gap-xs"><span className="material-symbols-outlined text-[16px]">location_on</span>{project.address ?? "—"}</span>
           </div>
         </div>
-        <div className="flex gap-sm">
+        <div className="flex flex-wrap gap-sm">
           <Link
             href={`/dashboard/upload?project=${project.id}`}
             className="flex items-center gap-xs px-lg py-md border border-outline-variant font-label-caps text-label-caps rounded-lg hover:bg-surface-container transition-colors"
@@ -197,7 +197,7 @@ export default function ProjectDetailPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-gutter mb-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-gutter mb-xl">
         <div className="bg-surface-container-lowest border border-outline-variant p-lg">
           <p className="font-label-caps text-label-caps text-on-surface-variant">PHOTOS</p>
           <p className="text-[32px] font-bold mt-xs">{project.assets.length}</p>
@@ -376,7 +376,7 @@ export default function ProjectDetailPage() {
           <h3 className="font-headline-md text-headline-md mb-lg">Generated Reports</h3>
           <div className="space-y-sm">
             {project.reports.map((report) => (
-              <div key={report.id} className="bg-surface-container-lowest border border-outline-variant p-lg flex items-center justify-between">
+              <div key={report.id} className="bg-surface-container-lowest border border-outline-variant p-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-sm">
                 <div className="flex items-center gap-md">
                   <span className="material-symbols-outlined text-primary">picture_as_pdf</span>
                   <div>

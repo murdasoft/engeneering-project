@@ -47,7 +47,7 @@ export default function KnowledgePage() {
         <p className="font-body-md text-on-surface-variant mt-xs">Reference guide for facade systems, defect types, and engineering standards.</p>
       </header>
 
-      <div className="flex gap-xs mb-lg">
+      <div className="flex flex-wrap gap-xs mb-lg">
         {[
           { key: "facades", label: "FACADE SYSTEMS" },
           { key: "defects", label: "DEFECT TYPES" },
@@ -96,7 +96,7 @@ export default function KnowledgePage() {
       )}
 
       {tab === "standards" && (
-        <div className="bg-surface-container-lowest border border-outline-variant">
+        <div className="bg-surface-container-lowest border border-outline-variant overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-surface-container font-label-caps text-[11px] text-on-surface-variant uppercase tracking-wider">

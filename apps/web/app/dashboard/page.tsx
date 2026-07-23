@@ -56,7 +56,7 @@ export default function DashboardPage() {
   return (
     <div className="animate-fade-in">
       {/* Header */}
-      <header className="flex justify-between items-end mb-xl">
+      <header className="flex flex-col md:flex-row md:justify-between md:items-end gap-md mb-xl">
         <div>
           <p className="font-label-caps text-label-caps text-secondary mb-xs">ENGINEERING CONSOLE</p>
           <h2 className="font-display-lg text-display-lg">Welcome back, Site Engineer.</h2>
@@ -82,7 +82,7 @@ export default function DashboardPage() {
             )}
             <p className="font-label-caps text-label-caps text-on-surface-variant mb-md">{kpi.label}</p>
             <div className="flex justify-between items-baseline">
-              <h3 className="text-[32px] font-bold text-on-surface">{kpi.value.toLocaleString("en-US")}</h3>
+              <h3 className="text-[28px] md:text-[32px] font-bold text-on-surface">{kpi.value.toLocaleString("en-US")}</h3>
               <span className={`text-${kpi.color} font-mono-data text-[12px]`}>{kpi.trend}</span>
             </div>
             <div className="w-full bg-surface-container h-1 mt-md">
@@ -249,7 +249,7 @@ export default function DashboardPage() {
       {/* Floating Action */}
       <Link
         href="/dashboard/upload"
-        className="fixed bottom-10 right-10 flex items-center gap-md bg-primary-container text-on-primary-container px-lg py-md shadow-lg border border-primary hover:-translate-y-0.5 transition-transform z-50"
+        className="fixed bottom-6 right-6 md:bottom-10 md:right-10 flex items-center gap-md bg-primary-container text-on-primary-container px-lg py-md shadow-lg border border-primary hover:-translate-y-0.5 transition-transform z-50"
       >
         <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>add_box</span>
         <span className="font-label-caps text-label-caps">NEW ANALYSIS</span>

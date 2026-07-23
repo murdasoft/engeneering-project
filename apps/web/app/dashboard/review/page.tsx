@@ -53,7 +53,7 @@ export default function ReviewPage() {
         <p className="font-body-md text-on-surface-variant mt-xs">Confirm, reject, or edit AI-detected defects.</p>
       </header>
 
-      <div className="flex gap-xs mb-lg">
+      <div className="flex flex-wrap gap-xs mb-lg">
         {filters.map((f) => (
           <button
             key={f}
@@ -80,7 +80,7 @@ export default function ReviewPage() {
       ) : (
         <div className="space-y-gutter">
           {findings.map((f) => (
-            <div key={f.id} className="bg-surface-container-lowest border border-outline-variant p-lg flex gap-lg items-center">
+            <div key={f.id} className="bg-surface-container-lowest border border-outline-variant p-lg flex flex-col sm:flex-row gap-lg sm:items-center">
               <div className="w-20 h-20 bg-surface-container rounded overflow-hidden flex-shrink-0">
                 <img src={f.analysis.asset.blobUrl} alt="" className="w-full h-full object-cover" />
               </div>
@@ -96,7 +96,7 @@ export default function ReviewPage() {
                 </p>
               </div>
               {filter === "PENDING" && (
-                <div className="flex gap-sm">
+                <div className="flex flex-wrap gap-sm">
                   <button
                     onClick={() => updateFinding(f.id, "CONFIRMED")}
                     className="flex items-center gap-xs px-md py-sm bg-primary text-on-primary font-label-caps text-label-caps rounded-lg hover:bg-primary-container transition-colors"

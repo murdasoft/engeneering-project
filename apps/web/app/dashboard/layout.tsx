@@ -49,106 +49,143 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const userName = session.user?.name ?? session.user?.email?.split("@")[0] ?? "User";
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  const NavLink = ({
+    item,
+    onClick,
+    isTool,
+  }: {
+    item: { href: string; icon: string; label: string };
+    onClick?: () => void;
+    isTool?: boolean;
+  }) => {
+    const active = isTool ? pathname.startsWith(item.href) : pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+    return (
+      <Link
+        href={item.href}
+        onClick={onClick}
+        className={`flex items-center gap-md px-gutter py-md font-label-caps text-label-caps transition-all ${
+          active
+            ? "bg-primary-container text-on-primary-container border-l-4 border-primary font-bold"
+            : "text-on-surface-variant hover:bg-surface-variant"
+        }`}
+      >
+        <span
+          className="material-symbols-outlined"
+          style={active ? { fontVariationSettings: "'FILL' 1, 'wght' 400" } : undefined}
+        >
+          {item.icon}
+        </span>
+        {item.label}
+      </Link>
+    );
+  };
+
+  const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => (
+    <>
+      <nav className="flex-1 space-y-1 px-sm overflow-y-auto">
+        {navItems.map((item) => (
+          <NavLink key={item.href} item={item} onClick={onItemClick} />
+        ))}
+
+        <div className="pt-lg pb-xs">
+          <p className="px-gutter font-label-caps text-[10px] text-outline uppercase tracking-wider">Engineering Tools</p>
+        </div>
+        {toolItems.map((item) => (
+          <NavLink key={item.href} item={item} onClick={onItemClick} isTool />
+        ))}
+      </nav>
+
+      <div className="mt-auto px-gutter pt-lg border-t border-outline-variant">
+        <Link
+          href="/dashboard/upload"
+          onClick={onItemClick}
+          className="w-full mb-lg py-sm bg-primary text-on-primary font-label-caps text-label-caps rounded-lg flex items-center justify-center gap-xs hover:bg-primary-container transition-colors"
+        >
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          NEW INSPECTION
+        </Link>
+        <div className="space-y-1">
+          <Link
+            href="/dashboard/settings"
+            onClick={onItemClick}
+            className="flex items-center gap-md py-sm text-on-surface-variant hover:text-primary font-label-caps text-label-caps transition-colors"
+          >
+            <span className="material-symbols-outlined text-[20px]">settings</span>
+            Settings
+          </Link>
+          <button
+            onClick={() => {
+              onItemClick?.();
+              signOut({ callbackUrl: "/login" });
+            }}
+            className="w-full flex items-center gap-md py-sm text-on-surface-variant hover:text-error font-label-caps text-label-caps transition-colors"
+          >
+            <span className="material-symbols-outlined text-[20px]">logout</span>
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  const Logo = () => (
+    <Link href="/dashboard" className="flex items-center gap-2">
+      <div className="w-9 h-9 bg-primary text-on-primary flex items-center justify-center font-bold text-lg rounded">I</div>
+      <span className="font-headline-md text-headline-md font-bold text-primary">InspectAI</span>
+    </Link>
+  );
 
   return (
     <div className="min-h-screen bg-surface flex">
-      {/* Sidebar */}
-      <aside className="h-screen w-64 fixed left-0 top-0 bg-surface-container flex flex-col py-lg border-r border-outline-variant z-50">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:flex md:h-screen md:w-64 md:fixed md:left-0 md:top-0 bg-surface-container flex-col py-lg border-r border-outline-variant z-50">
         <div className="px-gutter mb-xl">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="w-9 h-9 bg-primary text-on-primary flex items-center justify-center font-bold text-lg rounded">
-              I
-            </div>
-            <span className="font-headline-md text-headline-md font-bold text-primary">InspectAI</span>
-          </Link>
+          <Logo />
         </div>
-
-        <nav className="flex-1 space-y-1 px-sm overflow-y-auto">
-          {navItems.map((item) => {
-            const active = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-md px-gutter py-md font-label-caps text-label-caps transition-all ${
-                  active
-                    ? "bg-primary-container text-on-primary-container border-l-4 border-primary font-bold"
-                    : "text-on-surface-variant hover:bg-surface-variant"
-                }`}
-              >
-                <span
-                  className="material-symbols-outlined"
-                  style={active ? { fontVariationSettings: "'FILL' 1, 'wght' 400" } : undefined}
-                >
-                  {item.icon}
-                </span>
-                {item.label}
-              </Link>
-            );
-          })}
-
-          <div className="pt-lg pb-xs">
-            <p className="px-gutter font-label-caps text-[10px] text-outline uppercase tracking-wider">Engineering Tools</p>
-          </div>
-          {toolItems.map((item) => {
-            const active = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-md px-gutter py-md font-label-caps text-label-caps transition-all ${
-                  active
-                    ? "bg-primary-container text-on-primary-container border-l-4 border-primary font-bold"
-                    : "text-on-surface-variant hover:bg-surface-variant"
-                }`}
-              >
-                <span
-                  className="material-symbols-outlined"
-                  style={active ? { fontVariationSettings: "'FILL' 1, 'wght' 400" } : undefined}
-                >
-                  {item.icon}
-                </span>
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="mt-auto px-gutter pt-lg border-t border-outline-variant">
-          <Link
-            href="/dashboard/upload"
-            className="w-full mb-lg py-sm bg-primary text-on-primary font-label-caps text-label-caps rounded-lg flex items-center justify-center gap-xs hover:bg-primary-container transition-colors"
-          >
-            <span className="material-symbols-outlined text-[18px]">add</span>
-            NEW INSPECTION
-          </Link>
-          <div className="space-y-1">
-            <Link
-              href="/dashboard/settings"
-              className="flex items-center gap-md py-sm text-on-surface-variant hover:text-primary font-label-caps text-label-caps transition-colors"
-            >
-              <span className="material-symbols-outlined text-[20px]">settings</span>
-              Settings
-            </Link>
-            <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="w-full flex items-center gap-md py-sm text-on-surface-variant hover:text-error font-label-caps text-label-caps transition-colors"
-            >
-              <span className="material-symbols-outlined text-[20px]">logout</span>
-              Sign Out
-            </button>
-          </div>
-        </div>
+        <SidebarContent />
       </aside>
 
+      {/* Mobile Sidebar Overlay */}
+      {mobileOpen && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden="true"
+          />
+          <aside className="fixed inset-y-0 left-0 w-64 max-w-[80vw] bg-surface-container flex flex-col py-lg border-r border-outline-variant z-50 md:hidden">
+            <div className="px-gutter mb-xl flex items-center justify-between">
+              <Logo />
+              <button onClick={() => setMobileOpen(false)} className="text-on-surface-variant p-1">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            <SidebarContent onItemClick={() => setMobileOpen(false)} />
+          </aside>
+        </>
+      )}
+
       {/* Main Content */}
-      <main className="flex-1 ml-64 min-h-screen relative">
+      <main className="flex-1 min-h-screen md:ml-64 relative">
         {/* Top Bar */}
-        <header className="h-16 sticky top-0 bg-surface/90 backdrop-blur-sm border-b border-outline-variant z-40 flex items-center justify-between px-margin-desktop">
-          <div className="flex items-center gap-sm">
-            <span className="font-label-caps text-label-caps text-on-surface-variant">ENGINEERING CONSOLE</span>
+        <header className="h-16 sticky top-0 bg-surface/90 backdrop-blur-sm border-b border-outline-variant z-40 flex items-center justify-between px-margin-mobile md:px-margin-desktop">
+          <div className="flex items-center gap-sm min-w-0">
+            <button
+              onClick={() => setMobileOpen(true)}
+              className="md:hidden -ml-2 p-2 text-on-surface-variant"
+              aria-label="Open menu"
+            >
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+            <span className="font-label-caps text-label-caps text-on-surface-variant hidden sm:inline">ENGINEERING CONSOLE</span>
           </div>
-          <div className="flex items-center gap-md">
+          <div className="flex items-center gap-md shrink-0">
             <div className="flex items-center gap-xs text-primary font-label-caps text-[11px]">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
               LIVE
@@ -159,7 +196,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        <div className="p-margin-desktop">{children}</div>
+        <div className="p-margin-mobile md:p-margin-desktop">{children}</div>
       </main>
     </div>
   );

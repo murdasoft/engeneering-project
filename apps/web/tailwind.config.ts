@@ -85,7 +85,7 @@ const config: Config = {
       },
       fontSize: {
         "mono-data": ["12px", { lineHeight: "16px", fontWeight: "500" }],
-        "display-lg": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700" }],
+        "display-lg": ["clamp(24px, 5vw, 32px)", { lineHeight: "1.25", letterSpacing: "-0.02em", fontWeight: "700" }],
         "label-caps": ["11px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "700" }],
         "body-md": ["14px", { lineHeight: "22px", fontWeight: "400" }],
         "body-sm": ["13px", { lineHeight: "20px", fontWeight: "400" }],

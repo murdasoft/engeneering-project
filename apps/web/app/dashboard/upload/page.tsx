@@ -188,12 +188,12 @@ export default function UploadPage() {
 
   return (
     <div className="animate-fade-in flex flex-col h-[calc(100vh-4rem)]">
-      <header className="flex items-center justify-between mb-xl">
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-md mb-xl">
         <div>
           <p className="font-label-caps text-label-caps text-secondary mb-xs">BATCH UPLOAD</p>
           <h2 className="font-headline-md text-headline-md">Upload Inspection Photos</h2>
         </div>
-        <div className="flex items-center gap-md">
+        <div className="flex flex-wrap items-center gap-md">
           <select
             value={selectedProject}
             onChange={(e) => setSelectedProject(e.target.value)}
@@ -226,7 +226,7 @@ export default function UploadPage() {
           </Link>
         </div>
       ) : (
-        <div className="flex flex-1 gap-gutter overflow-hidden">
+        <div className="flex flex-col md:flex-row flex-1 gap-gutter overflow-y-auto md:overflow-hidden">
           {/* Drop Zone */}
           <div className="flex-1 flex flex-col">
             <div
@@ -319,7 +319,7 @@ export default function UploadPage() {
           </div>
 
           {/* Right Panel: Quality Guidance */}
-          <aside className="w-80 border-l border-outline-variant bg-surface-container-lowest flex flex-col p-lg space-y-lg overflow-y-auto">
+          <aside className="w-full md:w-80 border-l border-outline-variant bg-surface-container-lowest flex flex-col p-lg space-y-lg overflow-y-auto">
             <section>
               <h3 className="font-label-caps text-label-caps text-outline mb-md">PROJECT CONTEXT</h3>
               <div className="p-md bg-surface-container border border-outline-variant rounded">
@@ -407,7 +407,7 @@ export default function UploadPage() {
       {selectedIndex !== null && selectedFile && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={closeResult}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-md md:p-lg" onClick={(e) => e.stopPropagation()}>
             <button onClick={closeResult} className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface z-10">
               <span className="material-symbols-outlined">close</span>
             </button>

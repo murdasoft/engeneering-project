@@ -72,7 +72,7 @@ export default function ReportsPage() {
 
   return (
     <div className="animate-fade-in">
-      <header className="flex justify-between items-center mb-xl">
+      <header className="flex flex-col md:flex-row md:justify-between md:items-center gap-md mb-xl">
         <div>
           <p className="font-label-caps text-label-caps text-secondary mb-xs">FINAL REPORTS</p>
           <h2 className="font-display-lg text-display-lg">Engineering Reports</h2>
@@ -101,7 +101,7 @@ export default function ReportsPage() {
                 projects.map((p) => (
                   <div
                     key={p.id}
-                    className="flex items-center justify-between p-md border border-outline-variant rounded-lg hover:border-primary transition-colors"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-sm p-md border border-outline-variant rounded-lg hover:border-primary transition-colors"
                   >
                     <div>
                       <p className="font-title-sm text-title-sm">{p.name}</p>

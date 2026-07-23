@@ -65,7 +65,7 @@ export default function ToolPage({ params }: { params: { tool: string } }) {
 
   return (
     <div className="animate-fade-in flex flex-col h-[calc(100vh-4rem)]">
-      <header className="flex items-center justify-between mb-lg">
+      <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-md mb-lg">
         <div className="flex items-center gap-md">
           <Link
             href="/dashboard/tools"

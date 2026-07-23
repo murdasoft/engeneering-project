@@ -171,7 +171,7 @@ export default function AssetModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="relative bg-surface-container-lowest border border-outline-variant rounded-xl max-w-5xl w-full max-h-[90vh] overflow-y-auto p-md md:p-lg" onClick={(e) => e.stopPropagation()}>
         <button onClick={onClose} className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface z-10">
           <span className="material-symbols-outlined">close</span>
         </button>
