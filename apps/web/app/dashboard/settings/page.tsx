@@ -13,6 +13,7 @@ interface UserProfile {
   bio: string | null;
   avatarUrl: string | null;
   role: string;
+  preferences: { threshold?: number; notifications?: Record<string, boolean> } | null;
   createdAt: string;
 }
 
@@ -27,6 +28,13 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [threshold, setThreshold] = useState(0.25);
+  const [notifications, setNotifications] = useState({
+    emailCompleted: true,
+    criticalAlerts: true,
+    weeklySummary: false,
+    teamActivity: false,
+  });
 
   useEffect(() => {
     fetch("/api/user")
@@ -39,6 +47,11 @@ export default function SettingsPage() {
           setCompany(data.user.company ?? "");
           setPosition(data.user.position ?? "");
           setBio(data.user.bio ?? "");
+          const prefs = data.user.preferences;
+          if (prefs) {
+            if (typeof prefs.threshold === "number") setThreshold(prefs.threshold);
+            if (prefs.notifications) setNotifications(prefs.notifications);
+          }
         }
       })
       .finally(() => setLoading(false));
@@ -51,7 +64,14 @@ export default function SettingsPage() {
       const res = await fetch("/api/user", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone, company, position, bio }),
+        body: JSON.stringify({
+          name,
+          phone,
+          company,
+          position,
+          bio,
+          preferences: { threshold, notifications },
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -188,10 +208,13 @@ export default function SettingsPage() {
               min="0.05"
               max="0.95"
               step="0.05"
-              defaultValue="0.15"
+              value={threshold}
+              onChange={(e) => setThreshold(parseFloat(e.target.value))}
               className="w-full"
             />
-            <p className="font-mono-data text-mono-data text-on-surface-variant mt-xs">Lower = more sensitive (more false positives). Higher = more conservative.</p>
+            <p className="font-mono-data text-mono-data text-on-surface-variant mt-xs">
+              Current: {threshold.toFixed(2)} — Lower = more sensitive (more false positives). Higher = more conservative.
+            </p>
           </div>
         </div>
       </section>
@@ -200,13 +223,18 @@ export default function SettingsPage() {
         <h3 className="font-title-sm text-title-sm mb-lg">Notifications</h3>
         <div className="space-y-md">
           {[
-            { label: "Email notifications for completed analyses", defaultChecked: true },
-            { label: "Critical defect alerts", defaultChecked: true },
-            { label: "Weekly summary reports", defaultChecked: false },
-            { label: "Team activity updates", defaultChecked: false },
+            { key: "emailCompleted" as const, label: "Email notifications for completed analyses" },
+            { key: "criticalAlerts" as const, label: "Critical defect alerts" },
+            { key: "weeklySummary" as const, label: "Weekly summary reports" },
+            { key: "teamActivity" as const, label: "Team activity updates" },
           ].map((n) => (
-            <label key={n.label} className="flex items-center gap-md cursor-pointer">
-              <input type="checkbox" defaultChecked={n.defaultChecked} className="w-4 h-4 accent-primary" />
+            <label key={n.key} className="flex items-center gap-md cursor-pointer">
+              <input
+                type="checkbox"
+                checked={notifications[n.key]}
+                onChange={(e) => setNotifications((prev) => ({ ...prev, [n.key]: e.target.checked }))}
+                className="w-4 h-4 accent-primary"
+              />
               <span className="font-body-md text-body-md">{n.label}</span>
             </label>
           ))}

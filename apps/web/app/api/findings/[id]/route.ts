@@ -13,6 +13,17 @@ export async function PATCH(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const existing = await prisma.finding.findFirst({
+    where: {
+      id: params.id,
+      analysis: { userId: (session.user as any).id },
+    },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ error: "Finding not found" }, { status: 404 });
+  }
+
   const body = await req.json();
   const { reviewStatus, reviewerNote } = body;
 

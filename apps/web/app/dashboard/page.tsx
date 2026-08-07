@@ -11,6 +11,12 @@ interface DashboardData {
   totalFindings: number;
   severityDistribution: Record<string, number>;
   activity: Array<{ date: string; count: number }>;
+  trends: {
+    analyses: string;
+    pending: string;
+    confirmed: string;
+    reports: string;
+  };
   recentProjects: Array<{
     id: string;
     name: string;
@@ -47,10 +53,10 @@ export default function DashboardPage() {
   }
 
   const kpis = [
-    { label: "TOTAL ANALYSES", value: data?.totalAnalyses ?? 0, trend: "+12%", color: "primary", barWidth: "75%" },
-    { label: "PENDING REVIEWS", value: data?.pendingReviews ?? 0, trend: "HIGH ATTENTION", color: "error", barWidth: "33%", highlight: true },
-    { label: "CONFIRMED DEFECTS", value: data?.confirmedDefects ?? 0, trend: "STABLE", color: "secondary", barWidth: "50%" },
-    { label: "GENERATED REPORTS", value: data?.generatedReports ?? 0, trend: "SYNCED", color: "primary", barWidth: "100%" },
+    { label: "TOTAL ANALYSES", value: data?.totalAnalyses ?? 0, trend: data?.trends?.analyses ?? "—", color: "primary", barWidth: "75%" },
+    { label: "PENDING REVIEWS", value: data?.pendingReviews ?? 0, trend: data?.trends?.pending ?? "—", color: "error", barWidth: "33%", highlight: (data?.pendingReviews ?? 0) > 0 },
+    { label: "CONFIRMED DEFECTS", value: data?.confirmedDefects ?? 0, trend: data?.trends?.confirmed ?? "—", color: "secondary", barWidth: "50%" },
+    { label: "GENERATED REPORTS", value: data?.generatedReports ?? 0, trend: data?.trends?.reports ?? "—", color: "primary", barWidth: "100%" },
   ];
 
   return (

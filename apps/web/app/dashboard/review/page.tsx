@@ -9,6 +9,7 @@ interface Finding {
   confidence: number;
   severity: string;
   reviewStatus: string;
+  reviewerNote: string | null;
   analysis: {
     id: string;
     asset: { filename: string; blobUrl: string };
@@ -19,6 +20,8 @@ export default function ReviewPage() {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("PENDING");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editNote, setEditNote] = useState("");
 
   useEffect(() => {
     fetch(`/api/findings?status=${filter}`)
@@ -27,13 +30,14 @@ export default function ReviewPage() {
       .finally(() => setLoading(false));
   }, [filter]);
 
-  async function updateFinding(id: string, status: string) {
+  async function updateFinding(id: string, status: string, note?: string) {
     await fetch(`/api/findings/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reviewStatus: status }),
+      body: JSON.stringify({ reviewStatus: status, reviewerNote: note ?? undefined }),
     });
     setFindings((prev) => prev.filter((f) => f.id !== id));
+    setEditingId(null);
   }
 
   const severityColors: Record<string, string> = {
@@ -94,6 +98,11 @@ export default function ReviewPage() {
                 <p className="font-mono-data text-mono-data text-on-surface-variant">
                   {f.analysis.asset.filename} · {(f.confidence * 100).toFixed(0)}% confidence
                 </p>
+                {f.reviewerNote && filter !== "PENDING" && (
+                  <p className="font-body-sm text-body-sm text-on-surface-variant mt-xs italic">
+                    Note: {f.reviewerNote}
+                  </p>
+                )}
               </div>
               {filter === "PENDING" && (
                 <div className="flex flex-wrap gap-sm">
@@ -111,6 +120,34 @@ export default function ReviewPage() {
                     <span className="material-symbols-outlined text-[18px]">cancel</span>
                     REJECT
                   </button>
+                  <button
+                    onClick={() => { setEditingId(f.id); setEditNote(f.reviewerNote ?? ""); }}
+                    className="flex items-center gap-xs px-md py-sm border border-outline-variant text-on-surface-variant font-label-caps text-label-caps rounded-lg hover:bg-surface-container transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">edit</span>
+                    EDIT
+                  </button>
+                </div>
+              )}
+              {editingId === f.id && (
+                <div className="w-full mt-sm space-y-sm border-t border-outline-variant pt-sm">
+                  <textarea
+                    value={editNote}
+                    onChange={(e) => setEditNote(e.target.value)}
+                    placeholder="Add expert note about this finding..."
+                    className="w-full px-sm py-xs bg-surface-container border border-outline-variant rounded text-[12px] focus:border-primary focus:outline-none"
+                    rows={2}
+                  />
+                  <div className="flex gap-xs">
+                    <button
+                      onClick={() => updateFinding(f.id, "EDITED", editNote)}
+                      className="px-sm py-xs bg-blue-100 text-blue-700 rounded text-[10px] font-bold"
+                    >SAVE EDIT</button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="px-sm py-xs bg-surface-container text-on-surface-variant rounded text-[10px] font-bold"
+                    >CANCEL</button>
+                  </div>
                 </div>
               )}
             </div>

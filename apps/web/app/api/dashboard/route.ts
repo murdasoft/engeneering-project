@@ -12,7 +12,13 @@ export async function GET() {
 
   const userId = (session.user as any).id;
 
-  const [totalAnalyses, pendingReviews, confirmedDefects, generatedReports, recentProjects, totalFindings, severityRows, activityRows] =
+  const now = new Date();
+  const weekAgo = new Date(now);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const twoWeeksAgo = new Date(now);
+  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+  const [totalAnalyses, pendingReviews, confirmedDefects, generatedReports, recentProjects, totalFindings, severityRows, activityRows, thisWeekAnalyses, lastWeekAnalyses, thisWeekFindings, lastWeekFindings] =
     await Promise.all([
       prisma.analysis.count({ where: { userId } }),
       prisma.finding.count({ where: { reviewStatus: "PENDING", analysis: { userId } } }),
@@ -35,6 +41,10 @@ export async function GET() {
         where: { userId },
         _count: { id: true },
       }),
+      prisma.analysis.count({ where: { userId, createdAt: { gte: weekAgo } } }),
+      prisma.analysis.count({ where: { userId, createdAt: { gte: twoWeeksAgo, lt: weekAgo } } }),
+      prisma.finding.count({ where: { analysis: { userId }, createdAt: { gte: weekAgo } } }),
+      prisma.finding.count({ where: { analysis: { userId }, createdAt: { gte: twoWeeksAgo, lt: weekAgo } } }),
     ]);
 
   const severityDistribution: Record<string, number> = {
@@ -59,6 +69,15 @@ export async function GET() {
     if (entry) entry.count += r._count.id;
   });
 
+  const analysisTrend = lastWeekAnalyses > 0
+    ? `${thisWeekAnalyses > lastWeekAnalyses ? "+" : ""}${Math.round(((thisWeekAnalyses - lastWeekAnalyses) / lastWeekAnalyses) * 100)}%`
+    : thisWeekAnalyses > 0 ? "+100%" : "—";
+  const findingsTrend = lastWeekFindings > 0
+    ? `${thisWeekFindings > lastWeekFindings ? "+" : ""}${Math.round(((thisWeekFindings - lastWeekFindings) / lastWeekFindings) * 100)}%`
+    : thisWeekFindings > 0 ? "+100%" : "—";
+  const pendingTrend = pendingReviews > 10 ? "HIGH ATTENTION" : pendingReviews > 0 ? "NEEDS REVIEW" : "ALL CLEAR";
+  const reportsTrend = generatedReports > 0 ? "SYNCED" : "—";
+
   return NextResponse.json({
     totalAnalyses,
     pendingReviews,
@@ -67,6 +86,12 @@ export async function GET() {
     totalFindings,
     severityDistribution,
     activity,
+    trends: {
+      analyses: analysisTrend,
+      pending: pendingTrend,
+      confirmed: findingsTrend,
+      reports: reportsTrend,
+    },
     recentProjects: recentProjects.map((p) => ({
       ...p,
       updatedAt: p.updatedAt.toISOString(),

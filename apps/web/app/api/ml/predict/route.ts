@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   const formData = await req.formData();
   const { searchParams } = new URL(req.url);
   const mlSearch = new URLSearchParams();
-  ["pixel_scale_mm", "environment", "aggression", "structure_type", "concrete_grade", "rebar_class", "structure_age", "protective_layer_mm"].forEach((key) => {
+  ["pixel_scale_mm", "environment", "aggression", "structure_type", "concrete_grade", "rebar_class", "structure_age", "protective_layer_mm", "threshold"].forEach((key) => {
     const value = searchParams.get(key);
     if (value) mlSearch.set(key, value);
   });

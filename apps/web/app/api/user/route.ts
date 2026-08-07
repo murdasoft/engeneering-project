@@ -22,6 +22,7 @@ export async function GET() {
       bio: true,
       avatarUrl: true,
       role: true,
+      preferences: true,
       createdAt: true,
     },
   });
@@ -41,7 +42,7 @@ export async function PATCH(req: Request) {
   }
 
   const body = await req.json();
-  const { name, phone, company, position, bio } = body;
+  const { name, phone, company, position, bio, preferences } = body;
 
   const user = await prisma.user.update({
     where: { id: (session.user as any).id },
@@ -51,6 +52,7 @@ export async function PATCH(req: Request) {
       ...(company !== undefined && { company }),
       ...(position !== undefined && { position }),
       ...(bio !== undefined && { bio }),
+      ...(preferences !== undefined && { preferences }),
     },
     select: {
       id: true,
@@ -62,6 +64,7 @@ export async function PATCH(req: Request) {
       bio: true,
       avatarUrl: true,
       role: true,
+      preferences: true,
     },
   });
 

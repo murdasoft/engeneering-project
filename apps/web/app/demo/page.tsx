@@ -50,6 +50,8 @@ export default function DemoPage() {
   const [filter, setFilter] = useState<"all" | "crack" | "other">("all");
   const [showBoxes, setShowBoxes] = useState(true);
   const [scale, setScale] = useState(1);
+  const [pixelScale, setPixelScale] = useState(0.05);
+  const [threshold, setThreshold] = useState(0.25);
   const fileRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -73,8 +75,11 @@ export default function DemoPage() {
     if (!file) return;
     setLoading(true); setError(null);
     const form = new FormData(); form.append("file", file);
+    const params = new URLSearchParams();
+    params.set("pixel_scale_mm", String(pixelScale));
+    params.set("threshold", String(threshold));
     try {
-      const res = await fetch("/api/ml/predict", { method: "POST", body: form });
+      const res = await fetch(`/api/ml/predict?${params.toString()}`, { method: "POST", body: form });
       if (!res.ok) { const d = await res.json().catch(() => ({})); setError(d.detail || `Error ${res.status}`); setLoading(false); return; }
       setResult(await res.json());
     } catch { setError("Network error"); }
@@ -84,8 +89,11 @@ export default function DemoPage() {
   const downloadPdf = async () => {
     if (!file) return;
     const form = new FormData(); form.append("file", file);
+    const params = new URLSearchParams();
+    params.set("pixel_scale_mm", String(pixelScale));
+    params.set("threshold", String(threshold));
     try {
-      const res = await fetch("/api/ml/report", { method: "POST", body: form });
+      const res = await fetch(`/api/ml/report?${params.toString()}`, { method: "POST", body: form });
       if (!res.ok) return;
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -204,7 +212,31 @@ export default function DemoPage() {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14, flexWrap: "wrap", gap: 10 }}>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#4b5563", fontWeight: 600 }}>
+                      Scale:
+                      <input
+                        type="number"
+                        step="0.001"
+                        value={pixelScale}
+                        onChange={(e) => setPixelScale(parseFloat(e.target.value) || 0)}
+                        style={{ width: 60, padding: "4px 6px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 12 }}
+                      />
+                      mm/px
+                    </label>
+                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#4b5563", fontWeight: 600 }}>
+                      Threshold:
+                      <input
+                        type="range"
+                        min="0.05"
+                        max="0.95"
+                        step="0.05"
+                        value={threshold}
+                        onChange={(e) => setThreshold(parseFloat(e.target.value))}
+                        style={{ width: 80, accentColor: "#0f766e" }}
+                      />
+                      {threshold.toFixed(2)}
+                    </label>
                     {!result && (
                       <button onClick={analyze} disabled={loading} style={{
                         padding: "10px 22px", borderRadius: 10, border: "none", background: "linear-gradient(135deg, #0f766e, #0d5c56)", color: "#fff", fontSize: 14, fontWeight: 700, cursor: loading ? "wait" : "pointer", opacity: loading ? 0.7 : 1, display: "inline-flex", alignItems: "center", boxShadow: "0 4px 12px rgba(15,118,110,0.2)",

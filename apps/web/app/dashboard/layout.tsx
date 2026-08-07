@@ -24,80 +24,52 @@ const toolItems = [
   { href: "/dashboard/tools/normbase", icon: "gavel", label: "NormBase" },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { data: session, status } = useSession();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    if (mounted && status === "unauthenticated") {
-      router.push("/login");
-    }
-  }, [status, router, mounted]);
-
-  if (!mounted || status === "loading" || !session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-surface">
-        <span className="material-symbols-outlined text-primary text-[48px] animate-spin">progress_activity</span>
-      </div>
-    );
-  }
-
-  const userName = session.user?.name ?? session.user?.email?.split("@")[0] ?? "User";
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
-
-  const NavLink = ({
-    item,
-    onClick,
-    isTool,
-  }: {
-    item: { href: string; icon: string; label: string };
-    onClick?: () => void;
-    isTool?: boolean;
-  }) => {
-    const active = isTool ? pathname.startsWith(item.href) : pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
-    return (
-      <Link
-        href={item.href}
-        onClick={onClick}
-        className={`flex items-center gap-md px-gutter py-md font-label-caps text-label-caps transition-all ${
-          active
-            ? "bg-primary-container text-on-primary-container border-l-4 border-primary font-bold"
-            : "text-on-surface-variant hover:bg-surface-variant"
-        }`}
+function NavLink({
+  item,
+  onClick,
+  isTool,
+  pathname,
+}: {
+  item: { href: string; icon: string; label: string };
+  onClick?: () => void;
+  isTool?: boolean;
+  pathname: string;
+}) {
+  const active = isTool ? pathname.startsWith(item.href) : pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+  return (
+    <Link
+      href={item.href}
+      onClick={onClick}
+      className={`flex items-center gap-md px-gutter py-md font-label-caps text-label-caps transition-all ${
+        active
+          ? "bg-primary-container text-on-primary-container border-l-4 border-primary font-bold"
+          : "text-on-surface-variant hover:bg-surface-variant"
+      }`}
+    >
+      <span
+        className="material-symbols-outlined"
+        style={active ? { fontVariationSettings: "'FILL' 1, 'wght' 400" } : undefined}
       >
-        <span
-          className="material-symbols-outlined"
-          style={active ? { fontVariationSettings: "'FILL' 1, 'wght' 400" } : undefined}
-        >
-          {item.icon}
-        </span>
-        {item.label}
-      </Link>
-    );
-  };
+        {item.icon}
+      </span>
+      {item.label}
+    </Link>
+  );
+}
 
-  const SidebarContent = ({ onItemClick }: { onItemClick?: () => void }) => (
+function SidebarContent({ onItemClick, pathname }: { onItemClick?: () => void; pathname: string }) {
+  return (
     <>
       <nav className="flex-1 space-y-1 px-sm overflow-y-auto">
         {navItems.map((item) => (
-          <NavLink key={item.href} item={item} onClick={onItemClick} />
+          <NavLink key={item.href} item={item} onClick={onItemClick} pathname={pathname} />
         ))}
 
         <div className="pt-lg pb-xs">
           <p className="px-gutter font-label-caps text-[10px] text-outline uppercase tracking-wider">Engineering Tools</p>
         </div>
         {toolItems.map((item) => (
-          <NavLink key={item.href} item={item} onClick={onItemClick} isTool />
+          <NavLink key={item.href} item={item} onClick={onItemClick} isTool pathname={pathname} />
         ))}
       </nav>
 
@@ -133,13 +105,47 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </div>
     </>
   );
+}
 
-  const Logo = () => (
+function Logo() {
+  return (
     <Link href="/dashboard" className="flex items-center gap-2">
       <div className="w-9 h-9 bg-primary text-on-primary flex items-center justify-center font-bold text-lg rounded">I</div>
       <span className="font-headline-md text-headline-md font-bold text-primary">InspectAI</span>
     </Link>
   );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const { data: session, status } = useSession();
+  const [mounted, setMounted] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router, mounted]);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
+
+  if (!mounted || status === "loading" || !session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface">
+        <span className="material-symbols-outlined text-primary text-[48px] animate-spin">progress_activity</span>
+      </div>
+    );
+  }
+
+  const userName = session.user?.name ?? session.user?.email?.split("@")[0] ?? "User";
 
   return (
     <div className="min-h-screen bg-surface flex">
@@ -148,7 +154,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="px-gutter mb-xl">
           <Logo />
         </div>
-        <SidebarContent />
+        <SidebarContent pathname={pathname} />
       </aside>
 
       {/* Mobile Sidebar Overlay */}
@@ -166,7 +172,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            <SidebarContent onItemClick={() => setMobileOpen(false)} />
+            <SidebarContent onItemClick={() => setMobileOpen(false)} pathname={pathname} />
           </aside>
         </>
       )}

@@ -61,6 +61,13 @@ export default function UploadPage() {
   const [detail, setDetail] = useState<{ findings: Finding[]; blobUrl: string } | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [activeTool, setActiveTool] = useState<{ tool: string; search: string; finding: Finding } | null>(null);
+  const [showParams, setShowParams] = useState(false);
+  const [analysisParams, setAnalysisParams] = useState<Record<string, string | number>>({
+    pixel_scale_mm: 0.05,
+    environment: "atmospheric",
+    aggression: "normal",
+    threshold: 0.25,
+  });
   const imgRef = useRef<HTMLImageElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
@@ -125,7 +132,7 @@ export default function UploadPage() {
         const analysisRes = await fetch("/api/analyses/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assetId, projectId: selectedProject, params: {} }),
+          body: JSON.stringify({ assetId, projectId: selectedProject, params: analysisParams }),
         });
         if (!analysisRes.ok) {
           const err = await analysisRes.json().catch(() => ({}));
@@ -333,6 +340,69 @@ export default function UploadPage() {
             <hr className="border-outline-variant" />
 
             <section>
+              <button
+                onClick={() => setShowParams((v) => !v)}
+                className="w-full flex items-center justify-between font-label-caps text-label-caps text-outline mb-md"
+              >
+                <span className="flex items-center gap-xs">
+                  <span className="material-symbols-outlined text-[18px]">tune</span>
+                  ANALYSIS PARAMETERS
+                </span>
+                <span className="material-symbols-outlined text-[18px]">{showParams ? "expand_less" : "expand_more"}</span>
+              </button>
+              {showParams && (
+                <div className="grid grid-cols-2 gap-sm mb-md p-md bg-surface-container border border-outline-variant rounded">
+                  <div>
+                    <label className="block font-label-caps text-[10px] text-on-surface-variant mb-xs">PIXEL SCALE (mm/px)</label>
+                    <input
+                      type="number"
+                      step="0.001"
+                      value={analysisParams.pixel_scale_mm}
+                      onChange={(e) => setAnalysisParams((p) => ({ ...p, pixel_scale_mm: parseFloat(e.target.value) || 0 }))}
+                      className="w-full px-sm py-xs bg-surface-container-lowest border border-outline-variant rounded font-body-sm focus:border-primary focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-label-caps text-[10px] text-on-surface-variant mb-xs">ENVIRONMENT</label>
+                    <select
+                      value={analysisParams.environment}
+                      onChange={(e) => setAnalysisParams((p) => ({ ...p, environment: e.target.value }))}
+                      className="w-full px-sm py-xs bg-surface-container-lowest border border-outline-variant rounded font-body-sm focus:border-primary focus:outline-none"
+                    >
+                      <option value="atmospheric">Atmospheric</option>
+                      <option value="indoor">Indoor</option>
+                      <option value="aggressive">Aggressive</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-label-caps text-[10px] text-on-surface-variant mb-xs">AGGRESSION</label>
+                    <select
+                      value={analysisParams.aggression}
+                      onChange={(e) => setAnalysisParams((p) => ({ ...p, aggression: e.target.value }))}
+                      className="w-full px-sm py-xs bg-surface-container-lowest border border-outline-variant rounded font-body-sm focus:border-primary focus:outline-none"
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="aggressive">Aggressive</option>
+                      <option value="mild">Mild</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-label-caps text-[10px] text-on-surface-variant mb-xs">THRESHOLD</label>
+                    <input
+                      type="range"
+                      min="0.05"
+                      max="0.95"
+                      step="0.05"
+                      value={analysisParams.threshold}
+                      onChange={(e) => setAnalysisParams((p) => ({ ...p, threshold: parseFloat(e.target.value) }))}
+                      className="w-full"
+                    />
+                    <p className="font-mono-data text-[10px] text-on-surface-variant mt-xs">
+                      {Number(analysisParams.threshold).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              )}
               <button
                 onClick={uploadAll}
                 disabled={files.length === 0 || isProcessing}

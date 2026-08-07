@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { put } from "@vercel/blob";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createReportDocument } from "@/lib/pdf-report";
 
@@ -153,11 +154,25 @@ export async function POST(req: Request) {
     );
   }
 
+  const reportFileName = `InspectAI-Report-${project.name.replace(/\s+/g, "-")}.pdf`;
+  let reportUrl: string | null = null;
+
+  try {
+    const blob = await put(`inspectai/reports/${project.id}/${Date.now()}-${reportFileName}`, pdfBuffer, {
+      access: "public",
+      contentType: "application/pdf",
+    });
+    reportUrl = blob.url;
+  } catch (e: any) {
+    console.error("[report:generate] Blob upload failed:", e);
+  }
+
   await prisma.report.create({
     data: {
       title: reportTitle,
       summary,
       projectId: project.id,
+      reportUrl,
     },
   });
 
@@ -167,7 +182,7 @@ export async function POST(req: Request) {
     status: 200,
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="InspectAI-Report-${project.name.replace(/\s+/g, "-")}.pdf"`,
+      "Content-Disposition": `attachment; filename="${reportFileName}"`,
       "Content-Length": uint8.byteLength.toString(),
     },
   });

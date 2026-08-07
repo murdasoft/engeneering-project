@@ -338,6 +338,14 @@ export default function AssetModal({
                                 className="px-sm py-xs bg-red-100 text-red-700 rounded text-[10px] font-bold"
                               >Reject</button>
                               <button
+                                onClick={async () => {
+                                  await fetch(`/api/findings/${d.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reviewStatus: "EDITED", reviewerNote: reviewNote }) });
+                                  setReviewingId(null);
+                                  loadLatestAnalysis();
+                                }}
+                                className="px-sm py-xs bg-blue-100 text-blue-700 rounded text-[10px] font-bold"
+                              >Edit</button>
+                              <button
                                 onClick={() => setReviewingId(null)}
                                 className="px-sm py-xs bg-surface-container text-on-surface-variant rounded text-[10px] font-bold"
                               >Cancel</button>

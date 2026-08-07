@@ -35,12 +35,21 @@ export default function ToolPage({ params }: { params: { tool: string } }) {
   const tool = TOOL_URLS[params.tool];
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       setSearch(window.location.search);
     }
   }, []);
+
+  useEffect(() => {
+    if (!tool) return;
+    const timer = setTimeout(() => {
+      if (loading) setFailed(true);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, [tool, loading]);
 
   if (!tool) {
     return (
@@ -92,17 +101,38 @@ export default function ToolPage({ params }: { params: { tool: string } }) {
       </header>
 
       <div className="flex-1 relative bg-surface-container-lowest border border-outline-variant rounded-xl overflow-hidden">
-        {loading && (
+        {loading && !failed && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="material-symbols-outlined text-primary text-[48px] animate-spin">progress_activity</span>
           </div>
         )}
-        <iframe
-          src={`${tool.url}${search}`}
-          className="w-full h-full border-0"
-          onLoad={() => setLoading(false)}
-          title={tool.name}
-        />
+        {failed && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-lg text-center">
+            <span className="material-symbols-outlined text-[64px] text-outline-variant">cloud_off</span>
+            <h3 className="font-headline-md text-headline-md mt-md">Tool unavailable</h3>
+            <p className="font-body-sm text-on-surface-variant mt-xs mb-lg max-w-md">
+              {tool.name} could not be loaded. The tool service may be offline or not yet deployed.
+            </p>
+            <a
+              href={`${tool.url}${search}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-xs bg-primary text-on-primary px-lg py-md font-label-caps text-label-caps rounded-lg hover:bg-primary-container transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+              TRY OPEN DIRECTLY
+            </a>
+          </div>
+        )}
+        {!failed && (
+          <iframe
+            src={`${tool.url}${search}`}
+            className="w-full h-full border-0"
+            onLoad={() => setLoading(false)}
+            onError={() => setFailed(true)}
+            title={tool.name}
+          />
+        )}
       </div>
     </div>
   );

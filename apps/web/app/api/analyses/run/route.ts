@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     formData.append("file", imageBlob, asset.filename);
 
     const search = new URLSearchParams();
-    ["pixel_scale_mm", "environment", "aggression", "structure_type", "concrete_grade", "rebar_class", "structure_age", "protective_layer_mm"].forEach((key) => {
+    ["pixel_scale_mm", "environment", "aggression", "structure_type", "concrete_grade", "rebar_class", "structure_age", "protective_layer_mm", "threshold"].forEach((key) => {
       if (params[key] !== undefined && params[key] !== "" && params[key] !== null) search.set(key, String(params[key]));
     });
     const mlEndpoint = `${mlUrl}/predict/detailed${search.toString() ? `?${search.toString()}` : ""}`;

@@ -163,23 +163,35 @@ export default function ReportsPage() {
                 <Link href={`/dashboard/projects/${r.project.id}`} className="font-label-caps text-[11px] text-secondary hover:underline">
                   {r.project.name}
                 </Link>
-                <button
-                  onClick={() => generateReport(r.project.id)}
-                  disabled={generating === r.project.id}
-                  className="flex items-center gap-xs text-primary font-label-caps text-[11px] hover:underline disabled:opacity-50"
-                >
-                  {generating === r.project.id ? (
-                    <>
-                      <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
-                      GENERATING...
-                    </>
-                  ) : (
-                    <>
-                      <span className="material-symbols-outlined text-[16px]">download</span>
-                      DOWNLOAD PDF
-                    </>
-                  )}
-                </button>
+                {r.reportUrl ? (
+                  <a
+                    href={r.reportUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-xs text-primary font-label-caps text-[11px] hover:underline"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">download</span>
+                    DOWNLOAD PDF
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => generateReport(r.project.id)}
+                    disabled={generating === r.project.id}
+                    className="flex items-center gap-xs text-primary font-label-caps text-[11px] hover:underline disabled:opacity-50"
+                  >
+                    {generating === r.project.id ? (
+                      <>
+                        <span className="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                        GENERATING...
+                      </>
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[16px]">download</span>
+                        REGENERATE PDF
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           ))}

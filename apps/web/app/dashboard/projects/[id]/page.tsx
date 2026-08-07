@@ -60,6 +60,7 @@ export default function ProjectDetailPage() {
     rebar_class: "",
     structure_age: "",
     protective_layer_mm: "",
+    threshold: 0.25,
   });
 
   useEffect(() => {
@@ -297,6 +298,21 @@ export default function ProjectDetailPage() {
               onChange={(e) => setAnalysisParams((p) => ({ ...p, protective_layer_mm: e.target.value }))}
               className="w-full px-sm py-xs bg-surface-container border border-outline-variant rounded font-body-sm focus:border-primary focus:outline-none"
             />
+          </div>
+          <div>
+            <label className="block font-label-caps text-[10px] text-on-surface-variant mb-xs">CONFIDENCE THRESHOLD</label>
+            <input
+              type="range"
+              min="0.05"
+              max="0.95"
+              step="0.05"
+              value={analysisParams.threshold}
+              onChange={(e) => setAnalysisParams((p) => ({ ...p, threshold: parseFloat(e.target.value) }))}
+              className="w-full"
+            />
+            <p className="font-mono-data text-[10px] text-on-surface-variant mt-xs">
+              Current: {Number(analysisParams.threshold).toFixed(2)} — Lower = more detections (more false positives)
+            </p>
           </div>
         </div>
         <p className="text-[11px] text-on-surface-variant mt-sm">
