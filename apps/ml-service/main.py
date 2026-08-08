@@ -28,13 +28,16 @@ app.add_middleware(
 )
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-HF_MODEL = os.getenv("HF_MODEL", "wjdqlscho/Crack_YOLO_Segmentation_model")
+HF_MODEL = os.getenv("HF_MODEL", "alllxndr/inspectai-crack-seg")
 HF_MODEL_FILE = os.getenv("HF_MODEL_FILE", "best.pt")
-HF_MODEL_FALLBACK = os.getenv("HF_MODEL_FALLBACK", "hyunon/crack-yolov8")
-HF_MODEL_FALLBACK_FILE = os.getenv("HF_MODEL_FALLBACK_FILE", "crack.pt")
+HF_MODEL_FALLBACK = os.getenv("HF_MODEL_FALLBACK", "wjdqlscho/Crack_YOLO_Segmentation_model")
+HF_MODEL_FALLBACK_FILE = os.getenv("HF_MODEL_FALLBACK_FILE", "best.pt")
 HF_MODEL_SECONDARY = os.getenv("HF_MODEL_SECONDARY", "keremberke/yolov8s-surface-crack-detection")
 HF_MODEL_SECONDARY_FILE = os.getenv("HF_MODEL_SECONDARY_FILE", "best.pt")
-CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.30"))
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.20"))
+MIN_CRACK_AREA = 120          # allow thin, elongated small cracks
+MIN_CRACK_MAX_DIM = 30        # but still require meaningful length
+SMALL_CRACK_AREA_CUTOFF = 1500  # below this, NMS is more permissive
 
 # Non-crack object classes that cause false positives
 NON_CRACK_OBJECTS = {
@@ -158,10 +161,21 @@ def _directional_contrast_check(img_array: np.ndarray, box: list) -> float:
     h, w = img_array.shape[:2]
     x1, y1 = max(0, x1), max(0, y1)
     x2, y2 = min(w, x2), min(h, y2)
-    if x2 - x1 < 10 or y2 - y1 < 10:
+    if x2 - x1 < 3 or y2 - y1 < 3:
         return 0.0
     region = img_array[y1:y2, x1:x2]
     gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY) if len(region.shape) == 3 else region
+    # Pad very thin regions so Sobel has enough context to estimate anisotropy
+    min_h, min_w = gray.shape[:2]
+    top = bottom = left = right = 0
+    if min_h < 10:
+        pad = (10 - min_h + 1) // 2
+        top = bottom = pad
+    if min_w < 10:
+        pad = (10 - min_w + 1) // 2
+        left = right = pad
+    if top or bottom or left or right:
+        gray = cv2.copyMakeBorder(gray, top, bottom, left, right, cv2.BORDER_REPLICATE)
     gx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
     gy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
     grad_mag = np.sqrt(gx**2 + gy**2)
@@ -186,7 +200,7 @@ def _local_contrast_check(img_array: np.ndarray, box: list) -> float:
     h, w = img_array.shape[:2]
     x1, y1 = max(0, x1), max(0, y1)
     x2, y2 = min(w, x2), min(h, y2)
-    if x2 - x1 < 5 or y2 - y1 < 5:
+    if x2 - x1 < 2 or y2 - y1 < 2:
         return 0.0
     region = img_array[y1:y2, x1:x2]
     gray = cv2.cvtColor(region, cv2.COLOR_RGB2GRAY) if len(region.shape) == 3 else region
@@ -207,7 +221,9 @@ def _validate_crack_region(img_array: np.ndarray, box: list) -> Tuple[bool, floa
     contrast = _local_contrast_check(img_array, box)
 
     score = (edge_density * 0.4 + anisotropy * 0.4 + contrast * 0.2)
-    is_valid = score > 0.15
+    # Small/thin cracks can have weaker CV scores; relax the bar for them
+    min_score = 0.12 if _box_area(box) < 400 else 0.15
+    is_valid = score > min_score
     return is_valid, score
 
 
@@ -250,11 +266,24 @@ def _aspect_ratio_ok(box: list) -> bool:
         return False
     min_dim = min(w, h)
     max_dim = max(w, h)
-    return (min_dim / max_dim) <= 0.67 and max_dim >= 20
+    return (min_dim / max_dim) <= 0.85 and max_dim >= 20
 
 
 def _box_area(box: list) -> float:
     return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
+
+
+def _box_max_dim(box: list) -> float:
+    return max(box[2] - box[0], box[3] - box[1])
+
+
+def _min_crack_size_ok(box: list) -> bool:
+    """Accept normal cracks and very thin/small cracks, reject tiny blobs."""
+    area = _box_area(box)
+    if area >= 400:
+        return True
+    max_dim = _box_max_dim(box)
+    return area >= MIN_CRACK_AREA and max_dim >= MIN_CRACK_MAX_DIM
 
 
 def _box_area_ratio(box: list, img_array: np.ndarray) -> float:
@@ -351,6 +380,90 @@ def _center_distance(box_a: list, box_b: list) -> float:
     return math.hypot(cx_a - cx_b, cy_a - cy_b)
 
 
+def _select_imgsz(img_array: np.ndarray, max_size: int = 1280) -> int:
+    """Pick an inference size that preserves small cracks without blowing up memory."""
+    max_dim = max(img_array.shape[:2])
+    return max(640, min(max_size, ((max_dim + 31) // 32) * 32))
+
+
+def _nms_suppress(box_a: list, box_b: list) -> bool:
+    """Suppress overlapping detections while preserving dense small cracks."""
+    iou = compute_iou(box_a, box_b)
+    containment = _intersection_over_smaller(box_a, box_b)
+    if iou > 0.45 or containment > 0.80:
+        return True
+    # For larger boxes, also suppress near-duplicate offset detections
+    if _box_area(box_a) > SMALL_CRACK_AREA_CUTOFF or _box_area(box_b) > SMALL_CRACK_AREA_CUTOFF:
+        c_dist = _center_distance(box_a, box_b)
+        if c_dist < 30.0:
+            return True
+    return False
+
+
+def _cv_dense_crack_candidates(img_array: np.ndarray) -> list:
+    """Classical CV fallback for dense, small, thin cracks that YOLO may miss.
+
+    Uses black-hat morphological transform to enhance dark, thin line structures,
+    then extracts elongated connected components as crack candidates.
+    Returns list of (box, confidence, class_name, mask) tuples.
+    """
+    h, w = img_array.shape[:2]
+    gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+
+    # Downscale huge images to keep the morphological pass fast
+    max_dim = max(h, w)
+    scale = 1.0
+    if max_dim > 1024:
+        scale = 1024.0 / max_dim
+        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
+    # Black-hat enhances dark thin cracks on a lighter background
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
+    blackhat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+    if blackhat.max() == 0:
+        return []
+
+    # Keep the strongest line-like responses
+    threshold = float(np.percentile(blackhat, 95))
+    _, binary = cv2.threshold(blackhat, threshold, 255, cv2.THRESH_BINARY)
+    binary = binary.astype(np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, np.ones((2, 2), np.uint8), iterations=1)
+
+    component_count, labels, stats, centers = cv2.connectedComponentsWithStats(binary, 8)
+    if component_count <= 1:
+        return []
+
+    work_h, work_w = gray.shape[:2]
+    candidates = []
+    for i in range(1, component_count):
+        x, y, bw, bh, area = stats[i]
+        # Ignore noise and huge blobs
+        if area < 50 or area > 30000:
+            continue
+        maxd = max(bw, bh)
+        mind = min(bw, bh)
+        # Elongated, not blobby
+        if maxd < 30 or mind / maxd > 0.85:
+            continue
+        # Reject components covering too much of the image
+        if (bw * bh) / (work_h * work_w) > 0.5:
+            continue
+
+        box = [x, y, x + bw, y + bh]
+        # Scale box back to original image coordinates if resized
+        if scale != 1.0:
+            box = [coord / scale for coord in box]
+
+        is_valid, cv_score = _validate_crack_region(img_array, box)
+        if not is_valid:
+            continue
+
+        # Base confidence for CV detections is modest; boost by validation score
+        adjusted_conf = 0.35 * (0.7 + cv_score * 0.3)
+        candidates.append((box, adjusted_conf, "crack", None))
+    return candidates
+
+
 def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD):
     """Run models, filter noise, and merge detections with aggressive NMS.
     
@@ -366,6 +479,11 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
     all_class_names = []
     all_masks = []
 
+    # Use a higher resolution for high-res images so small cracks are preserved
+    imgsz = _select_imgsz(img_array)
+    # Allow secondary/fallback to consider weaker small-crack candidates
+    small_crack_threshold = max(0.15, threshold - 0.10)
+
     # Detect non-crack objects first (pipes, doors, outlets, etc.)
     non_crack_objects = _detect_non_crack_objects(img_array)
 
@@ -374,7 +492,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
     model = get_model("primary")
     if model is not None:
         try:
-            results = model(img_array, conf=threshold, verbose=False)
+            results = model(img_array, conf=threshold, imgsz=imgsz, verbose=False)
             for result in results:
                 if result.boxes is None:
                     continue
@@ -390,7 +508,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                         continue
                     if not _aspect_ratio_ok(box):
                         continue
-                    if _box_area(box) < 400 or _box_area_ratio(box, img_array) > 0.70:
+                    if not _min_crack_size_ok(box) or _box_area_ratio(box, img_array) > 0.90:
                         continue
 
                     # Check overlap with non-crack objects
@@ -428,7 +546,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
     model = get_model("secondary")
     if model is not None:
         try:
-            results = model(img_array, conf=threshold, verbose=False)
+            results = model(img_array, conf=small_crack_threshold, imgsz=imgsz, verbose=False)
             for result in results:
                 if result.boxes is None:
                     continue
@@ -444,7 +562,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                         continue
                     if not _aspect_ratio_ok(box):
                         continue
-                    if _box_area(box) < 400 or _box_area_ratio(box, img_array) > 0.70:
+                    if not _min_crack_size_ok(box) or _box_area_ratio(box, img_array) > 0.70:
                         continue
 
                     # Check overlap with non-crack objects
@@ -475,7 +593,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
         model = get_model("fallback")
         if model is not None:
             try:
-                results = model(img_array, conf=threshold, verbose=False)
+                results = model(img_array, conf=small_crack_threshold, imgsz=imgsz, verbose=False)
                 for result in results:
                     if result.boxes is None:
                         continue
@@ -491,7 +609,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                             continue
                         if not _aspect_ratio_ok(box):
                             continue
-                        if _box_area(box) < 400 or _is_full_width_top_region(box, img_array):
+                        if not _min_crack_size_ok(box) or _is_full_width_top_region(box, img_array):
                             continue
 
                         overlaps_non_crack = False
@@ -507,7 +625,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                             continue
 
                         polygon = _extract_crack_polygon(img_array, box)
-                        if _box_area_ratio(box, img_array) > 0.70 and polygon is None:
+                        if _box_area_ratio(box, img_array) > 0.90 and polygon is None:
                             continue
 
                         adjusted_conf = conf * (0.7 + cv_score * 0.3)
@@ -515,6 +633,15 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
             except Exception:
                 pass
         all_entries = primary_detections + secondary_detections + fallback_detections
+
+    # If model ensemble still finds few cracks, use a classical-CV fallback tuned
+    # for dense networks of very small/thin cracks (e.g. shrinkage cracks).
+    if len(all_entries) < 3:
+        try:
+            cv_candidates = _cv_dense_crack_candidates(img_array)
+            all_entries.extend(cv_candidates)
+        except Exception:
+            pass
 
     if len(all_entries) == 0:
         # Still return non-crack objects if no cracks found
@@ -532,8 +659,6 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
 
     # Greedy NMS with IoU and center-distance merge
     suppressed = [False] * len(all_boxes)
-    iou_thresh = 0.35
-    center_thresh = 30.0
 
     for i in range(len(all_boxes)):
         if suppressed[i]:
@@ -541,10 +666,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
         for j in range(i + 1, len(all_boxes)):
             if suppressed[j]:
                 continue
-            iou = compute_iou(all_boxes[i], all_boxes[j])
-            c_dist = _center_distance(all_boxes[i], all_boxes[j])
-            containment = _intersection_over_smaller(all_boxes[i], all_boxes[j])
-            if iou > iou_thresh or containment > 0.80 or c_dist < center_thresh:
+            if _nms_suppress(all_boxes[i], all_boxes[j]):
                 suppressed[j] = True
 
     merged = []
@@ -1007,6 +1129,7 @@ async def health():
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(
     file: UploadFile = File(...),
+    threshold: float = Query(CONFIDENCE_THRESHOLD, ge=0.0, le=1.0),
     _: bool = Depends(verify_api_key),
 ):
     if not file.content_type or not file.content_type.startswith("image/"):
@@ -1026,7 +1149,7 @@ async def predict(
 
     start_time = time.time()
     try:
-        all_boxes, all_confs, all_names, all_masks = run_ensemble(img_array, CONFIDENCE_THRESHOLD)
+        all_boxes, all_confs, all_names, all_masks = run_ensemble(img_array, threshold)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model inference failed: {str(e)}")
 
@@ -1069,6 +1192,7 @@ async def predict(
 @app.post("/predict/detailed", response_model=DetailedPredictionResponse)
 async def predict_detailed(
     file: UploadFile = File(...),
+    threshold: float = Query(CONFIDENCE_THRESHOLD, ge=0.0, le=1.0),
     _: bool = Depends(verify_api_key),
     pixel_scale_mm: Optional[float] = Query(None),
     environment: str = Query("atmospheric"),
@@ -1096,7 +1220,7 @@ async def predict_detailed(
 
     start_time = time.time()
     try:
-        all_boxes, all_confs, all_names, all_masks = run_ensemble(img_array, CONFIDENCE_THRESHOLD)
+        all_boxes, all_confs, all_names, all_masks = run_ensemble(img_array, threshold)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model inference failed: {str(e)}")
 
@@ -1185,6 +1309,7 @@ async def predict_detailed(
 async def generate_report(
     file: UploadFile = File(...),
     _: bool = Depends(verify_api_key),
+    threshold: float = Query(CONFIDENCE_THRESHOLD, ge=0.0, le=1.0),
     project_name: str = Query("Не указан"),
     inspector: str = Query("InspectAI Automated System"),
     location: str = Query("Не указан"),
@@ -1214,7 +1339,7 @@ async def generate_report(
 
     start_time = time.time()
     try:
-        all_boxes, all_confs, all_names, all_masks = run_ensemble(img_array, CONFIDENCE_THRESHOLD)
+        all_boxes, all_confs, all_names, all_masks = run_ensemble(img_array, threshold)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Model inference failed: {str(e)}")
 
