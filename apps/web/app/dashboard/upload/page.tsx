@@ -93,6 +93,28 @@ export default function UploadPage() {
     setFiles((prev) => [...prev, ...newFiles]);
   }, []);
 
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith("image/")) {
+          const file = items[i].getAsFile();
+          if (file) imageFiles.push(file);
+        }
+      }
+      if (imageFiles.length > 0) {
+        e.preventDefault();
+        const dt = new DataTransfer();
+        imageFiles.forEach((f) => dt.items.add(f));
+        handleFiles(dt.files);
+      }
+    };
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+  }, [handleFiles]);
+
   const crackcalcSearch = (f: Finding) => {
     const params = new URLSearchParams();
     if (f.widthMm) params.set("width", f.widthMm.toFixed(2));
@@ -256,6 +278,10 @@ export default function UploadPage() {
               <span className="material-symbols-outlined text-outline-variant text-[64px] mb-lg">upload_file</span>
               <p className="font-headline-md text-headline-md text-on-surface-variant mb-xs">Drop files to scan</p>
               <p className="font-body-sm text-body-sm text-outline">JPG, PNG, WEBP (Max 50MB per file)</p>
+              <p className="font-body-sm text-body-sm text-outline-variant mt-sm flex items-center gap-xs">
+                <span className="material-symbols-outlined text-[16px]">content_paste</span>
+                or press <kbd className="px-1.5 py-0.5 bg-surface-container border border-outline-variant rounded text-[11px] font-mono">Ctrl+V</kbd> to paste from clipboard
+              </p>
             </div>
 
             {/* Preview Grid */}
