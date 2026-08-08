@@ -16,7 +16,7 @@ from huggingface_hub import hf_hub_download, login as hf_login
 app = FastAPI(
     title="InspectAI ML Service",
     description="YOLOv8-based concrete defect detection API with engineering analysis",
-    version="2.0.0",
+    version="5.0.0",
 )
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
@@ -380,10 +380,123 @@ def _center_distance(box_a: list, box_b: list) -> float:
     return math.hypot(cx_a - cx_b, cy_a - cy_b)
 
 
-def _select_imgsz(img_array: np.ndarray, max_size: int = 1280) -> int:
+def _select_imgsz(img_array: np.ndarray, max_size: int = 1536) -> int:
     """Pick an inference size that preserves small cracks without blowing up memory."""
     max_dim = max(img_array.shape[:2])
     return max(640, min(max_size, ((max_dim + 31) // 32) * 32))
+
+
+def _run_multiscale(model, img_array: np.ndarray, conf: float, imgsz: int, verbose: bool = False):
+    """Run inference at multiple scales + TTA and merge detections.
+    Returns list of (box, conf, cls_name, mask, result_obj, idx).
+    """
+    scales = [imgsz]
+    if imgsz < 1280:
+        scales.append(min(1280, ((max(img_array.shape[:2]) + 31) // 32) * 32))
+    scales = sorted(set(scales), reverse=True)
+
+    all_dets = []
+    seen_boxes = []
+
+    for sz in scales:
+        try:
+            results = model(img_array, conf=conf, imgsz=sz, augment=True, verbose=verbose)
+        except Exception:
+            try:
+                results = model(img_array, conf=conf, imgsz=sz, verbose=verbose)
+            except Exception:
+                continue
+        for result in results:
+            if result.boxes is None:
+                continue
+            boxes = result.boxes
+            for i in range(len(boxes)):
+                cls_name = get_class_name(model, int(boxes.cls[i].item()))
+                c = float(boxes.conf[i].item())
+                xyxy = boxes.xyxy[i].cpu().numpy()
+                x1, y1, x2, y2 = map(float, xyxy)
+                box = [x1, y1, x2, y2]
+
+                # Deduplicate across scales: skip if nearly identical box already found
+                dup = False
+                for sb in seen_boxes:
+                    if compute_iou(box, sb) > 0.6:
+                        dup = True
+                        break
+                if dup:
+                    continue
+                seen_boxes.append(box)
+
+                mask = None
+                if hasattr(result, 'masks') and result.masks is not None:
+                    try:
+                        polygon = result.masks.xy[i]
+                        if polygon is not None and len(polygon) >= 3:
+                            mask = [[float(point[0]), float(point[1])] for point in polygon]
+                    except Exception:
+                        pass
+
+                all_dets.append((box, c, cls_name, mask))
+    return all_dets
+
+
+def _run_sahi(model, img_array: np.ndarray, conf: float, imgsz: int = 640, tile_size: int = 640, overlap: float = 0.25):
+    """Slicing Aided Hyper Inference: split large image into overlapping tiles,
+    run detection on each, and map detections back to original coordinates.
+    Great for finding small/thin cracks in high-resolution images.
+    """
+    h, w = img_array.shape[:2]
+    if h <= tile_size and w <= tile_size:
+        return []
+
+    stride = int(tile_size * (1 - overlap))
+    all_dets = []
+    seen_boxes = []
+
+    for y0 in range(0, h, stride):
+        for x0 in range(0, w, stride):
+            x1_tile = min(x0 + tile_size, w)
+            y1_tile = min(y0 + tile_size, h)
+            tile = img_array[y0:y1_tile, x0:x1_tile]
+            if tile.shape[0] < 64 or tile.shape[1] < 64:
+                continue
+            try:
+                results = model(tile, conf=conf, imgsz=imgsz, verbose=False)
+            except Exception:
+                continue
+            for result in results:
+                if result.boxes is None:
+                    continue
+                boxes = result.boxes
+                for i in range(len(boxes)):
+                    cls_name = get_class_name(model, int(boxes.cls[i].item()))
+                    c = float(boxes.conf[i].item())
+                    xyxy = boxes.xyxy[i].cpu().numpy()
+                    bx1, by1, bx2, by2 = map(float, xyxy)
+                    # Map back to original image coordinates
+                    box = [bx1 + x0, by1 + y0, bx2 + x0, by2 + y0]
+
+                    # Deduplicate
+                    dup = False
+                    for sb in seen_boxes:
+                        if compute_iou(box, sb) > 0.5:
+                            dup = True
+                            break
+                    if dup:
+                        continue
+                    seen_boxes.append(box)
+
+                    mask = None
+                    if hasattr(result, 'masks') and result.masks is not None:
+                        try:
+                            polygon = result.masks.xy[i]
+                            if polygon is not None and len(polygon) >= 3:
+                                mask = [[float(p[0] + x0), float(p[1] + y0)] for p in polygon]
+                        except Exception:
+                            pass
+
+                    all_dets.append((box, c, cls_name, mask))
+    return all_dets
 
 
 def _nms_suppress(box_a: list, box_b: list) -> bool:
@@ -487,57 +600,51 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
     # Detect non-crack objects first (pipes, doors, outlets, etc.)
     non_crack_objects = _detect_non_crack_objects(img_array)
 
-    # Run primary model first
+    # Run primary model with multi-scale + TTA
     primary_detections = []
     model = get_model("primary")
     if model is not None:
         try:
-            results = model(img_array, conf=threshold, imgsz=imgsz, verbose=False)
-            for result in results:
-                if result.boxes is None:
-                    continue
-                boxes = result.boxes
-                for i in range(len(boxes)):
-                    cls_name = get_class_name(model, int(boxes.cls[i].item()))
-                    conf = float(boxes.conf[i].item())
-                    xyxy = boxes.xyxy[i].cpu().numpy()
-                    x1, y1, x2, y2 = map(float, xyxy)
-                    box = [x1, y1, x2, y2]
-
-                    if not _is_crack_like(cls_name):
-                        continue
-                    if not _aspect_ratio_ok(box):
-                        continue
-                    if not _min_crack_size_ok(box) or _box_area_ratio(box, img_array) > 0.90:
-                        continue
-
-                    # Check overlap with non-crack objects
-                    overlaps_non_crack = False
-                    for nc_box, nc_conf, nc_name in non_crack_objects:
-                        if compute_iou(box, nc_box) > 0.3:
-                            overlaps_non_crack = True
+            dets = _run_multiscale(model, img_array, conf=threshold, imgsz=imgsz)
+            # Also run SAHI for high-res images to catch small cracks in tiles
+            h, w = img_array.shape[:2]
+            if h > 640 or w > 640:
+                sahi_dets = _run_sahi(model, img_array, conf=threshold, imgsz=640)
+                # Merge SAHI detections, deduplicate against multiscale
+                for sd in sahi_dets:
+                    dup = False
+                    for md in dets:
+                        if compute_iou(sd[0], md[0]) > 0.5:
+                            dup = True
                             break
-                    if overlaps_non_crack:
-                        continue
+                    if not dup:
+                        dets.append(sd)
 
-                    # CV validation — verify crack-like visual features
-                    is_valid, cv_score = _validate_crack_region(img_array, box)
-                    if not is_valid:
-                        continue
+            for box, conf, cls_name, mask in dets:
+                if not _is_crack_like(cls_name):
+                    continue
+                if not _aspect_ratio_ok(box):
+                    continue
+                if not _min_crack_size_ok(box) or _box_area_ratio(box, img_array) > 0.90:
+                    continue
 
-                    # Extract mask polygon in original-image coordinates if available
-                    mask = None
-                    if hasattr(result, 'masks') and result.masks is not None:
-                        try:
-                            polygon = result.masks.xy[i]
-                            if polygon is not None and len(polygon) >= 3:
-                                mask = [[float(point[0]), float(point[1])] for point in polygon]
-                        except Exception:
-                            pass
+                # Check overlap with non-crack objects
+                overlaps_non_crack = False
+                for nc_box, nc_conf, nc_name in non_crack_objects:
+                    if compute_iou(box, nc_box) > 0.3:
+                        overlaps_non_crack = True
+                        break
+                if overlaps_non_crack:
+                    continue
 
-                    # Boost confidence based on CV score
-                    adjusted_conf = conf * (0.7 + cv_score * 0.3)
-                    primary_detections.append((box, adjusted_conf, cls_name, mask))
+                # CV validation — verify crack-like visual features
+                is_valid, cv_score = _validate_crack_region(img_array, box)
+                if not is_valid:
+                    continue
+
+                # Boost confidence based on CV score
+                adjusted_conf = conf * (0.7 + cv_score * 0.3)
+                primary_detections.append((box, adjusted_conf, cls_name, mask))
         except Exception:
             pass
 
@@ -546,41 +653,31 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
     model = get_model("secondary")
     if model is not None:
         try:
-            results = model(img_array, conf=small_crack_threshold, imgsz=imgsz, verbose=False)
-            for result in results:
-                if result.boxes is None:
+            dets = _run_multiscale(model, img_array, conf=small_crack_threshold, imgsz=imgsz)
+            for box, conf, cls_name, mask in dets:
+                if not _is_crack_like(cls_name):
                     continue
-                boxes = result.boxes
-                for i in range(len(boxes)):
-                    cls_name = get_class_name(model, int(boxes.cls[i].item()))
-                    conf = float(boxes.conf[i].item())
-                    xyxy = boxes.xyxy[i].cpu().numpy()
-                    x1, y1, x2, y2 = map(float, xyxy)
-                    box = [x1, y1, x2, y2]
+                if not _aspect_ratio_ok(box):
+                    continue
+                if not _min_crack_size_ok(box) or _box_area_ratio(box, img_array) > 0.90:
+                    continue
 
-                    if not _is_crack_like(cls_name):
-                        continue
-                    if not _aspect_ratio_ok(box):
-                        continue
-                    if not _min_crack_size_ok(box) or _box_area_ratio(box, img_array) > 0.70:
-                        continue
+                # Check overlap with non-crack objects
+                overlaps_non_crack = False
+                for nc_box, nc_conf, nc_name in non_crack_objects:
+                    if compute_iou(box, nc_box) > 0.3:
+                        overlaps_non_crack = True
+                        break
+                if overlaps_non_crack:
+                    continue
 
-                    # Check overlap with non-crack objects
-                    overlaps_non_crack = False
-                    for nc_box, nc_conf, nc_name in non_crack_objects:
-                        if compute_iou(box, nc_box) > 0.3:
-                            overlaps_non_crack = True
-                            break
-                    if overlaps_non_crack:
-                        continue
+                # CV validation
+                is_valid, cv_score = _validate_crack_region(img_array, box)
+                if not is_valid:
+                    continue
 
-                    # CV validation
-                    is_valid, cv_score = _validate_crack_region(img_array, box)
-                    if not is_valid:
-                        continue
-
-                    adjusted_conf = conf * (0.7 + cv_score * 0.3)
-                    secondary_detections.append((box, adjusted_conf, cls_name, None))
+                adjusted_conf = conf * (0.7 + cv_score * 0.3)
+                secondary_detections.append((box, adjusted_conf, cls_name, None))
         except Exception:
             pass
 
@@ -593,43 +690,33 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
         model = get_model("fallback")
         if model is not None:
             try:
-                results = model(img_array, conf=small_crack_threshold, imgsz=imgsz, verbose=False)
-                for result in results:
-                    if result.boxes is None:
+                dets = _run_multiscale(model, img_array, conf=small_crack_threshold, imgsz=imgsz)
+                for box, conf, cls_name, mask in dets:
+                    if not _is_crack_like(cls_name):
                         continue
-                    boxes = result.boxes
-                    for i in range(len(boxes)):
-                        cls_name = get_class_name(model, int(boxes.cls[i].item()))
-                        conf = float(boxes.conf[i].item())
-                        xyxy = boxes.xyxy[i].cpu().numpy()
-                        x1, y1, x2, y2 = map(float, xyxy)
-                        box = [x1, y1, x2, y2]
+                    if not _aspect_ratio_ok(box):
+                        continue
+                    if not _min_crack_size_ok(box) or _is_full_width_top_region(box, img_array):
+                        continue
 
-                        if not _is_crack_like(cls_name):
-                            continue
-                        if not _aspect_ratio_ok(box):
-                            continue
-                        if not _min_crack_size_ok(box) or _is_full_width_top_region(box, img_array):
-                            continue
+                    overlaps_non_crack = False
+                    for nc_box, nc_conf, nc_name in non_crack_objects:
+                        if compute_iou(box, nc_box) > 0.3:
+                            overlaps_non_crack = True
+                            break
+                    if overlaps_non_crack:
+                        continue
 
-                        overlaps_non_crack = False
-                        for nc_box, nc_conf, nc_name in non_crack_objects:
-                            if compute_iou(box, nc_box) > 0.3:
-                                overlaps_non_crack = True
-                                break
-                        if overlaps_non_crack:
-                            continue
+                    is_valid, cv_score = _validate_crack_region(img_array, box)
+                    if not is_valid:
+                        continue
 
-                        is_valid, cv_score = _validate_crack_region(img_array, box)
-                        if not is_valid:
-                            continue
+                    polygon = _extract_crack_polygon(img_array, box)
+                    if _box_area_ratio(box, img_array) > 0.90 and polygon is None:
+                        continue
 
-                        polygon = _extract_crack_polygon(img_array, box)
-                        if _box_area_ratio(box, img_array) > 0.90 and polygon is None:
-                            continue
-
-                        adjusted_conf = conf * (0.7 + cv_score * 0.3)
-                        fallback_detections.append((box, adjusted_conf, cls_name, polygon))
+                    adjusted_conf = conf * (0.7 + cv_score * 0.3)
+                    fallback_detections.append((box, adjusted_conf, cls_name, polygon))
             except Exception:
                 pass
         all_entries = primary_detections + secondary_detections + fallback_detections
