@@ -617,12 +617,13 @@ def _merge_crack_segments(entries: list, max_gap: float = 60.0) -> list:
             # Union of all mask points
             merged_mask = []
             for m in g["masks"]:
-                merged_mask.extend(m)
+                if m:
+                    merged_mask.extend(m)
         out.append((
             g["box"],
             max(g["confs"]),
             g["class_name"],
-            merged_mask if len(merged_mask) >= 3 else None,
+            merged_mask if merged_mask and len(merged_mask) >= 3 else None,
         ))
     return out
 
