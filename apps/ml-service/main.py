@@ -56,7 +56,7 @@ NON_CRACK_OBJECTS = {
 # Authenticate with HuggingFace if token is available
 if HF_TOKEN:
     hf_login(token=HF_TOKEN)
-API_KEY = os.getenv("ML_API_KEY", "")
+API_KEY = os.getenv("ML_API_KEY", "").strip()
 
 
 async def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
@@ -1266,7 +1266,12 @@ class DetailedPredictionResponse(PredictionResponse):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": SERVICE_VERSION, "models": [HF_MODEL, HF_MODEL_FALLBACK, HF_MODEL_SECONDARY]}
+    return {
+        "status": "ok",
+        "version": SERVICE_VERSION,
+        "models": [HF_MODEL, HF_MODEL_FALLBACK, HF_MODEL_SECONDARY],
+        "api_key_required": bool(API_KEY),
+    }
 
 
 @app.post("/predict", response_model=PredictionResponse)

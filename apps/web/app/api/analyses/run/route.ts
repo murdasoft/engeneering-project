@@ -67,7 +67,12 @@ export async function POST(req: Request) {
 
     if (!mlRes.ok) {
       const errData = await mlRes.json().catch(() => ({}));
-      throw new Error(errData.detail ?? `ML API returned ${mlRes.status}`);
+      const detail = typeof errData.detail === "string"
+        ? errData.detail
+        : Array.isArray(errData.detail)
+          ? errData.detail.map((d: any) => d.msg ?? JSON.stringify(d)).join("; ")
+          : errData.error ?? `ML API returned ${mlRes.status}`;
+      throw new Error(detail);
     }
 
     const result = await mlRes.json();
