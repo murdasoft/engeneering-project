@@ -357,7 +357,7 @@ def _extract_crack_polygon(img_array: np.ndarray, box: list) -> Optional[list]:
         return None
 
     polygon = cv2.approxPolyDP(hull, max(2.0, diagonal * 0.003), True)
-    if len(polygon) < 3:
+    if polygon is None or len(polygon) < 3:
         return None
     return [[float(point[0][0]), float(point[0][1])] for point in polygon]
 
@@ -541,40 +541,48 @@ def _merge_two_masks(mask_a: Optional[list], mask_b: Optional[list]) -> Optional
     return mask_a + mask_b
 
 
+def _min_box_distance(box_a: list, box_b: list) -> float:
+    """Minimum distance between edges of two boxes."""
+    dx = max(0, max(box_a[0], box_b[0]) - min(box_a[2], box_b[2]))
+    dy = max(0, max(box_a[1], box_b[1]) - min(box_a[3], box_b[3]))
+    return math.hypot(dx, dy)
+
+
 def _should_merge_cracks(box_a: list, box_b: list, angle_a: float, angle_b: float, min_gap: float = 40.0) -> bool:
     """Decide if two crack segments should merge into one continuous crack.
     Rules:
-      - Close enough (box distance < min_gap)
-      - Similar orientation (angle diff < 45 deg)
-      - Elongated enough (at least one box has aspect < 0.5)
+      - Close enough (minimum gap between box edges < min_gap)
+      - Similar orientation (angle diff < 35 deg)
+      - Elongated enough (at least one box has aspect < 0.55)
     """
-    c_dist = _center_distance(box_a, box_b)
-    if c_dist > min_gap:
+    gap = _min_box_distance(box_a, box_b)
+    if gap > min_gap:
         return False
     angle_diff = abs(angle_a - angle_b)
     angle_diff = min(angle_diff, 180 - angle_diff)
-    if angle_diff > 45:
+    if angle_diff > 35:
         return False
     w = max(1, box_a[2] - box_a[0])
     h = max(1, box_a[3] - box_a[1])
     aw, ah = max(1, box_b[2] - box_b[0]), max(1, box_b[3] - box_b[1])
     aspect_a = min(w, h) / max(w, h)
     aspect_b = min(aw, ah) / max(aw, ah)
-    if aspect_a > 0.5 and aspect_b > 0.5:
+    if aspect_a > 0.55 and aspect_b > 0.55:
+        return False
+    if max(w, h) < 15 or max(aw, ah) < 15:
         return False
     return True
 
 
-def _merge_crack_segments(entries: list, max_gap: float = 60.0) -> list:
+def _merge_crack_segments(entries: list, max_gap: float = 120.0) -> list:
     """Iteratively merge collinear/adjacent crack segments into longer continuous cracks.
     entries: list of (box, conf, class_name, mask)
     """
     if not entries:
         return []
 
-    # Keep a list of merged groups. Each group is (box, confs, class_name, masks)
     groups = []
-    for box, conf, cls_name, mask in entries:
+    for box, conf, cls_name, mask in sorted(entries, key=lambda e: _box_area(e[0]), reverse=True):
         groups.append({
             "box": box,
             "confs": [conf],
@@ -598,27 +606,41 @@ def _merge_crack_segments(entries: list, max_gap: float = 60.0) -> list:
                 gj = groups[j]
                 angle_j = _crack_direction(gj["box"])
                 if _should_merge_cracks(gi["box"], gj["box"], angle_i, angle_j, max_gap):
-                    # Merge j into i
                     gi["box"] = _merge_two_boxes(gi["box"], gj["box"])
                     gi["confs"].extend(gj["confs"])
                     gi["masks"].extend(gj["masks"])
                     used[j] = True
                     changed = True
-                    angle_i = _crack_direction(gi["box"])  # recompute
+                    angle_i = _crack_direction(gi["box"])
             merged.append(gi)
             used[i] = True
         groups = merged
 
-    # Convert back to entries. Confidence is max of merged group.
     out = []
     for g in groups:
         merged_mask = None
         if g["masks"]:
-            # Union of all mask points
-            merged_mask = []
+            all_points = []
             for m in g["masks"]:
                 if m:
-                    merged_mask.extend(m)
+                    all_points.extend(m)
+            if len(all_points) >= 3:
+                pts = np.array(all_points, dtype=np.float32)
+                mean = pts.mean(axis=0)
+                centered = pts - mean
+                cov = np.cov(centered.T)
+                if cov.size == 4 and cov.shape == (2, 2):
+                    try:
+                        _, _, v = np.linalg.svd(cov)
+                        axis = v[0]
+                        proj = centered.dot(axis)
+                        order = np.argsort(proj)
+                        ordered = pts[order]
+                        merged_mask = ordered.tolist()
+                    except Exception:
+                        merged_mask = all_points
+                else:
+                    merged_mask = all_points
         out.append((
             g["box"],
             max(g["confs"]),
@@ -1390,7 +1412,7 @@ async def predict(
         detections=detections,
         annotated_image=annotated_b64,
         processing_time=processing_time,
-        model_version="ensemble-v4.0",
+        model_version="ensemble-v5.0",
     )
 
 
@@ -1504,7 +1526,7 @@ async def predict_detailed(
         detections=detections,
         annotated_image=annotated_b64,
         processing_time=processing_time,
-        model_version="ensemble-v4.0",
+        model_version="ensemble-v5.0",
         detections_detailed=detections_detailed,
         summary=summary,
     )
