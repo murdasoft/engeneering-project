@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { ToolOverlay } from "@/app/components/ToolOverlay";
+import { DetectionOverlay } from "@/app/components/DetectionOverlay";
 
 interface Finding {
   id: string;
@@ -511,49 +512,24 @@ export default function UploadPage() {
             <h3 className="font-headline-md text-headline-md mb-md">{selectedFile.name}</h3>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
-              <div ref={wrapRef} className="relative rounded-lg overflow-hidden bg-surface-container">
+              <div ref={wrapRef} className="relative rounded-lg overflow-hidden">
                 {detailLoading ? (
-                  <div className="aspect-square flex items-center justify-center">
+                  <div className="aspect-square flex items-center justify-center bg-surface-container">
                     <span className="material-symbols-outlined text-primary text-[48px] animate-spin">progress_activity</span>
                   </div>
                 ) : (
-                  <>
-                    <img
-                      ref={imgRef}
-                      src={detail?.blobUrl ?? selectedFile.url ?? selectedFile.previewUrl}
-                      alt={selectedFile.name}
-                      className="w-full h-auto block"
-                      onLoad={onImgLoad}
-                    />
-                    {detail && detail.findings.map((f, i) => {
-                      const sev = (f.severity || "low").toUpperCase();
-                      const color = sev === "CRITICAL" ? "#ef4444" : sev === "HIGH" ? "#f97316" : sev === "MEDIUM" ? "#f59e0b" : "#10b981";
-                      const polygon = f.bbox.polygon;
-                      return polygon?.length ? (
-                        <svg
-                          key={f.id || i}
-                          className="absolute inset-0 w-full h-full pointer-events-none"
-                          viewBox={`0 0 ${imgRef.current?.naturalWidth || 1} ${imgRef.current?.naturalHeight || 1}`}
-                          preserveAspectRatio="none"
-                        >
-                          <polygon points={polygon.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={`${color}45`} stroke={color} strokeWidth="3" />
-                        </svg>
-                      ) : (
-                        <div
-                          key={f.id || i}
-                          className="absolute border-2 bg-transparent"
-                          style={{
-                            left: f.bbox.x * scale,
-                            top: f.bbox.y * scale,
-                            width: f.bbox.width * scale,
-                            height: f.bbox.height * scale,
-                            borderColor: color,
-                          }}
-                          title={`${f.className} ${(f.confidence * 100).toFixed(0)}%`}
-                        />
-                      );
-                    })}
-                  </>
+                  <DetectionOverlay
+                    imageUrl={detail?.blobUrl ?? selectedFile.url ?? selectedFile.previewUrl}
+                    alt={selectedFile.name}
+                    items={(detail?.findings ?? []).map((f) => ({
+                      id: f.id,
+                      class: f.className,
+                      confidence: f.confidence,
+                      severity: f.severity,
+                      bbox: f.bbox,
+                    }))}
+                    className="rounded-lg"
+                  />
                 )}
               </div>
 

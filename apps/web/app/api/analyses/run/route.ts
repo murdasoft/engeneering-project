@@ -88,9 +88,12 @@ export async function POST(req: Request) {
       confidence: det.confidence ?? 0,
       severity: (det.severity ?? "low").toUpperCase(),
       bbox: det.bbox,
-      widthMm: det.engineering?.estimated_width_mm ?? null,
-      heightMm: det.engineering?.estimated_length_mm ?? null,
-      areaMm2: det.engineering?.estimated_area_cm2 ? det.engineering.estimated_area_cm2 * 100 : null,
+      // Only persist mm when the run had a calibrated pixel scale
+      widthMm: params.pixel_scale_mm ? (det.engineering?.estimated_width_mm ?? null) : null,
+      heightMm: params.pixel_scale_mm ? (det.engineering?.estimated_length_mm ?? null) : null,
+      areaMm2: params.pixel_scale_mm && det.engineering?.estimated_area_cm2
+        ? det.engineering.estimated_area_cm2 * 100
+        : null,
     }));
 
     await prisma.analysis.update({

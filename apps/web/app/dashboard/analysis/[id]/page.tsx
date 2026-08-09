@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ToolOverlay } from "@/app/components/ToolOverlay";
+import { DetectionOverlay } from "@/app/components/DetectionOverlay";
 
 interface Finding {
   id: string;
@@ -213,42 +214,19 @@ export default function AnalysisDetailPage() {
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
-        <div ref={wrapRef} className="relative rounded-lg overflow-hidden bg-surface-container">
-          <img
-            ref={imgRef}
-            src={analysis.asset.blobUrl}
+        <div ref={wrapRef} className="relative rounded-lg overflow-hidden">
+          <DetectionOverlay
+            imageUrl={analysis.asset.blobUrl}
             alt={analysis.asset.filename}
-            className="w-full h-auto block"
-            onLoad={onImgLoad}
+            items={allItems.map((d) => ({
+              id: d.id,
+              class: d.class,
+              confidence: d.confidence,
+              severity: d.severity,
+              bbox: d.bbox,
+            }))}
+            className="rounded-lg"
           />
-          {allItems.map((d, i) => {
-            const sev = (d.severity || "low").toUpperCase();
-            const color = d.class === "other" ? "#94a3b8" : sev === "CRITICAL" ? "#ef4444" : sev === "HIGH" ? "#f97316" : sev === "MEDIUM" ? "#f59e0b" : "#10b981";
-            const polygon = d.bbox?.polygon;
-            return polygon?.length ? (
-              <svg
-                key={d.id || i}
-                className="absolute inset-0 w-full h-full pointer-events-none"
-                viewBox={`0 0 ${imgRef.current?.naturalWidth || 1} ${imgRef.current?.naturalHeight || 1}`}
-                preserveAspectRatio="none"
-              >
-                <polygon points={polygon.map((p: number[]) => `${p[0]},${p[1]}`).join(" ")} fill={`${color}45`} stroke={color} strokeWidth="3" />
-              </svg>
-            ) : (
-              <div
-                key={d.id || i}
-                className="absolute border-2 bg-transparent"
-                style={{
-                  left: d.bbox.x * scale,
-                  top: d.bbox.y * scale,
-                  width: d.bbox.width * scale,
-                  height: d.bbox.height * scale,
-                  borderColor: color,
-                }}
-                title={`${d.class} ${(d.confidence * 100).toFixed(0)}%`}
-              />
-            );
-          })}
         </div>
 
         <div className="space-y-md">

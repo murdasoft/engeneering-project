@@ -196,9 +196,18 @@ export default function DemoPage() {
                         onMouseLeave={() => setActive(null)}
                         style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: dim ? 0.25 : 0.9, transition: "opacity .15s ease" }}
                         viewBox={`0 0 ${imgRef.current?.naturalWidth || 1} ${imgRef.current?.naturalHeight || 1}`}
-                        preserveAspectRatio="none"
+                        preserveAspectRatio="xMidYMid meet"
                       >
-                        <polygon points={d.bbox.polygon.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={a ? `${s.c}35` : `${s.c}20`} stroke={s.c} strokeWidth="3" />
+                        <polygon
+                          points={d.bbox.polygon.map((p) => `${p[0]},${p[1]}`).join(" ")}
+                          fill={
+                            ((d.bbox.width * d.bbox.height) / Math.max(1, (imgRef.current?.naturalWidth || 1) * (imgRef.current?.naturalHeight || 1))) > 0.18
+                              ? "none"
+                              : (a ? `${s.c}35` : `${s.c}20`)
+                          }
+                          stroke={s.c}
+                          strokeWidth="3"
+                        />
                       </svg>
                     ) : (
                       <div key={i} onMouseEnter={() => setActive(i)} onMouseLeave={() => setActive(null)} style={{

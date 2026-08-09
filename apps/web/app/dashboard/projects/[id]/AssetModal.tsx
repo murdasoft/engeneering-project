@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ToolOverlay } from "@/app/components/ToolOverlay";
+import { DetectionOverlay } from "@/app/components/DetectionOverlay";
 
 interface Asset {
   id: string;
@@ -68,7 +69,6 @@ export default function AssetModal({
   const [analysis, setAnalysis] = useState<AnalysisDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [scale, setScale] = useState(1);
-  const [natSize, setNatSize] = useState({ w: 0, h: 0 });
   const [classFilter, setClassFilter] = useState("all");
   const [severityFilter, setSeverityFilter] = useState("all");
   const [showOther, setShowOther] = useState(true);
@@ -94,7 +94,6 @@ export default function AssetModal({
 
   const onImgLoad = () => {
     if (imgRef.current && wrapRef.current) {
-      setNatSize({ w: imgRef.current.naturalWidth, h: imgRef.current.naturalHeight });
       setScale(wrapRef.current.clientWidth / imgRef.current.naturalWidth);
     }
   };
@@ -187,61 +186,13 @@ export default function AssetModal({
         </p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
-          <div ref={wrapRef} className="relative rounded-lg overflow-hidden bg-surface-container">
-            <img ref={imgRef} src={asset.blobUrl} alt={asset.filename} className="w-full h-auto block" onLoad={onImgLoad} />
-            {natSize.w > 0 ? (
-              <svg
-                className="absolute inset-0 w-full h-full pointer-events-none"
-                viewBox={`0 0 ${natSize.w} ${natSize.h}`}
-                preserveAspectRatio="xMidYMid meet"
-              >
-                {allItems.map((d, i) => {
-                  const sev = (d.severity || "low").toUpperCase();
-                  const color = d.class === "other" ? "#94a3b8" : sev === "CRITICAL" ? "#ef4444" : sev === "HIGH" ? "#f97316" : sev === "MEDIUM" ? "#f59e0b" : "#10b981";
-                  const polygon = d.bbox?.polygon;
-                  const bw = Math.max(1, d.bbox?.width || 1);
-                  const bh = Math.max(1, d.bbox?.height || 1);
-                  const imgArea = natSize.w * natSize.h;
-                  const boxArea = bw * bh;
-                  // Huge masks used to paint a solid color over half the photo — stroke only
-                  const allowFill = Boolean(polygon?.length) && boxArea / imgArea <= 0.18;
-                  if (polygon?.length) {
-                    const pts = polygon.map((p: number[]) => `${p[0]},${p[1]}`).join(" ");
-                    return (
-                      <g key={d.id || i}>
-                        {allowFill ? (
-                          <polygon points={pts} fill={`${color}33`} stroke={color} strokeWidth="2.5" />
-                        ) : (
-                          <polygon points={pts} fill="none" stroke={color} strokeWidth="2.5" />
-                        )}
-                        <rect
-                          x={d.bbox.x}
-                          y={d.bbox.y}
-                          width={d.bbox.width}
-                          height={d.bbox.height}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth="2"
-                          strokeDasharray={allowFill ? undefined : "6 4"}
-                        />
-                      </g>
-                    );
-                  }
-                  return (
-                    <rect
-                      key={d.id || i}
-                      x={d.bbox.x}
-                      y={d.bbox.y}
-                      width={d.bbox.width}
-                      height={d.bbox.height}
-                      fill="none"
-                      stroke={color}
-                      strokeWidth="2"
-                    />
-                  );
-                })}
-              </svg>
-            ) : null}
+          <div ref={wrapRef} className="relative rounded-lg overflow-hidden">
+            <DetectionOverlay
+              imageUrl={asset.blobUrl}
+              alt={asset.filename}
+              items={allItems}
+              className="rounded-lg"
+            />
           </div>
 
           <div className="space-y-md">

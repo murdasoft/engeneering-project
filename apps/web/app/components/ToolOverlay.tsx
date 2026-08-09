@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
+import { DetectionOverlay } from "@/app/components/DetectionOverlay";
 
 interface FindingLike {
   id: string;
@@ -38,27 +39,13 @@ export function ToolOverlay({
   onClose: () => void;
 }) {
   const meta = TOOLS[tool] ?? { name: tool, url: "" };
-  const imgRef = useRef<HTMLImageElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
   const [loaded, setLoaded] = useState(false);
-
-  const onImgLoad = () => {
-    if (imgRef.current && wrapRef.current) {
-      setScale(wrapRef.current.clientWidth / imgRef.current.naturalWidth);
-    }
-  };
 
   const sp = new URLSearchParams(search ? search.replace(/^\?/, "") : "");
   sp.set("embed", "1");
   const src = meta.url ? `${meta.url}?${sp.toString()}` : "";
 
   const sev = (finding.severity || "low").toUpperCase();
-  const color =
-    sev === "CRITICAL" ? "#ef4444" :
-    sev === "HIGH" ? "#f97316" :
-    sev === "MEDIUM" ? "#f59e0b" :
-    "#10b981";
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4" onClick={onClose}>
@@ -67,7 +54,6 @@ export function ToolOverlay({
         className="relative bg-surface-container-lowest border border-outline-variant rounded-xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-md py-sm border-b border-outline-variant">
           <div className="flex items-center gap-md">
             <button onClick={onClose} className="text-on-surface-variant hover:text-primary flex items-center gap-xs font-label-caps text-[11px]">
@@ -82,40 +68,20 @@ export function ToolOverlay({
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
-          {/* Left: image + context */}
           <div className="lg:col-span-1 border-r border-outline-variant overflow-y-auto p-md bg-surface-container-low">
-            <div ref={wrapRef} className="relative rounded-lg overflow-hidden bg-surface-container mb-md">
-              <img
-                ref={imgRef}
-                src={imageUrl}
-                alt="Finding"
-                className="w-full h-auto block"
-                onLoad={onImgLoad}
-              />
-              {finding.bbox.polygon?.length ? (
-                <svg
-                  className="absolute inset-0 w-full h-full pointer-events-none"
-                  viewBox={`0 0 ${imgRef.current?.naturalWidth || 1} ${imgRef.current?.naturalHeight || 1}`}
-                  preserveAspectRatio="none"
-                >
-                  <polygon points={finding.bbox.polygon.map((p) => `${p[0]},${p[1]}`).join(" ")} fill={`${color}45`} stroke={color} strokeWidth="3" />
-                </svg>
-              ) : (
-                <div
-                  className="absolute border-2 bg-transparent"
-                  style={{
-                    left: finding.bbox.x * scale,
-                    top: finding.bbox.y * scale,
-                    width: finding.bbox.width * scale,
-                    height: finding.bbox.height * scale,
-                    borderColor: color,
-                  }}
-                  title={`${finding.className} ${(finding.confidence * 100).toFixed(0)}%`}
-                />
-              )}
-            </div>
+            <DetectionOverlay
+              imageUrl={imageUrl}
+              alt="Finding"
+              items={[{
+                id: finding.id,
+                class: finding.className,
+                confidence: finding.confidence,
+                severity: finding.severity,
+                bbox: finding.bbox,
+              }]}
+              className="rounded-lg mb-md"
+            />
 
             <div className="space-y-sm">
               <p className="font-body-sm text-body-sm text-on-surface-variant uppercase">Measured finding</p>
@@ -133,6 +99,11 @@ export function ToolOverlay({
               <p className="text-[11px] text-on-surface-variant">
                 Confidence: {(finding.confidence * 100).toFixed(0)}% · Severity: {SEV_LABEL[sev] || sev}
               </p>
+              {!finding.widthMm && (
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded p-sm">
+                  Set pixel scale (mm/px) when running analysis for calibrated CrackCalc widths. Without it, mm values are not passed into the tool.
+                </p>
+              )}
               <button
                 onClick={onClose}
                 className="mt-md w-full py-sm bg-surface-container text-on-surface-variant font-label-caps text-label-caps rounded-lg border border-outline-variant hover:bg-primary/5 hover:text-primary transition-colors"
@@ -142,7 +113,6 @@ export function ToolOverlay({
             </div>
           </div>
 
-          {/* Right: tool iframe */}
           <div className="lg:col-span-2 relative bg-surface-container-lowest">
             {!loaded && (
               <div className="absolute inset-0 flex items-center justify-center z-10">
