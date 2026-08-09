@@ -503,14 +503,128 @@ def _nms_suppress(box_a: list, box_b: list) -> bool:
     """Suppress overlapping detections while preserving dense small cracks."""
     iou = compute_iou(box_a, box_b)
     containment = _intersection_over_smaller(box_a, box_b)
-    if iou > 0.45 or containment > 0.80:
+    if iou > 0.70 or containment > 0.90:
         return True
     # For larger boxes, also suppress near-duplicate offset detections
     if _box_area(box_a) > SMALL_CRACK_AREA_CUTOFF or _box_area(box_b) > SMALL_CRACK_AREA_CUTOFF:
         c_dist = _center_distance(box_a, box_b)
-        if c_dist < 30.0:
+        if c_dist < 20.0:
             return True
     return False
+
+
+def _crack_direction(box: list) -> float:
+    """Return dominant angle of a crack box in degrees (0-180)."""
+    w = max(1, box[2] - box[0])
+    h = max(1, box[3] - box[1])
+    return math.degrees(math.atan2(h, w))
+
+
+def _merge_two_boxes(box_a: list, box_b: list) -> list:
+    """Merge two bounding boxes into one that covers both."""
+    return [
+        min(box_a[0], box_b[0]),
+        min(box_a[1], box_b[1]),
+        max(box_a[2], box_b[2]),
+        max(box_a[3], box_b[3]),
+    ]
+
+
+def _merge_two_masks(mask_a: Optional[list], mask_b: Optional[list]) -> Optional[list]:
+    """Merge two polygon masks by taking their union of points."""
+    if mask_a is None and mask_b is None:
+        return None
+    if mask_a is None:
+        return mask_b
+    if mask_b is None:
+        return mask_a
+    return mask_a + mask_b
+
+
+def _should_merge_cracks(box_a: list, box_b: list, angle_a: float, angle_b: float, min_gap: float = 40.0) -> bool:
+    """Decide if two crack segments should merge into one continuous crack.
+    Rules:
+      - Close enough (box distance < min_gap)
+      - Similar orientation (angle diff < 45 deg)
+      - Elongated enough (at least one box has aspect < 0.5)
+    """
+    c_dist = _center_distance(box_a, box_b)
+    if c_dist > min_gap:
+        return False
+    angle_diff = abs(angle_a - angle_b)
+    angle_diff = min(angle_diff, 180 - angle_diff)
+    if angle_diff > 45:
+        return False
+    w = max(1, box_a[2] - box_a[0])
+    h = max(1, box_a[3] - box_a[1])
+    aw, ah = max(1, box_b[2] - box_b[0]), max(1, box_b[3] - box_b[1])
+    aspect_a = min(w, h) / max(w, h)
+    aspect_b = min(aw, ah) / max(aw, ah)
+    if aspect_a > 0.5 and aspect_b > 0.5:
+        return False
+    return True
+
+
+def _merge_crack_segments(entries: list, max_gap: float = 60.0) -> list:
+    """Iteratively merge collinear/adjacent crack segments into longer continuous cracks.
+    entries: list of (box, conf, class_name, mask)
+    """
+    if not entries:
+        return []
+
+    # Keep a list of merged groups. Each group is (box, confs, class_name, masks)
+    groups = []
+    for box, conf, cls_name, mask in entries:
+        groups.append({
+            "box": box,
+            "confs": [conf],
+            "class_name": cls_name,
+            "masks": [mask] if mask is not None else [],
+        })
+
+    changed = True
+    while changed:
+        changed = False
+        merged = []
+        used = [False] * len(groups)
+        for i in range(len(groups)):
+            if used[i]:
+                continue
+            gi = groups[i]
+            angle_i = _crack_direction(gi["box"])
+            for j in range(i + 1, len(groups)):
+                if used[j]:
+                    continue
+                gj = groups[j]
+                angle_j = _crack_direction(gj["box"])
+                if _should_merge_cracks(gi["box"], gj["box"], angle_i, angle_j, max_gap):
+                    # Merge j into i
+                    gi["box"] = _merge_two_boxes(gi["box"], gj["box"])
+                    gi["confs"].extend(gj["confs"])
+                    gi["masks"].extend(gj["masks"])
+                    used[j] = True
+                    changed = True
+                    angle_i = _crack_direction(gi["box"])  # recompute
+            merged.append(gi)
+            used[i] = True
+        groups = merged
+
+    # Convert back to entries. Confidence is max of merged group.
+    out = []
+    for g in groups:
+        merged_mask = None
+        if g["masks"]:
+            # Union of all mask points
+            merged_mask = []
+            for m in g["masks"]:
+                merged_mask.extend(m)
+        out.append((
+            g["box"],
+            max(g["confs"]),
+            g["class_name"],
+            merged_mask if len(merged_mask) >= 3 else None,
+        ))
+    return out
 
 
 def _cv_dense_crack_candidates(img_array: np.ndarray) -> list:
@@ -736,6 +850,9 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
             pass
         else:
             return [], [], [], []
+
+    # Merge collinear crack segments into continuous cracks before NMS
+    all_entries = _merge_crack_segments(all_entries, max_gap=80.0)
 
     # Sort crack detections by confidence descending for greedy NMS
     all_entries.sort(key=lambda x: x[1], reverse=True)
