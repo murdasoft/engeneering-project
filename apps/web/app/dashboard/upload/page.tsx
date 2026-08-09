@@ -66,7 +66,7 @@ export default function UploadPage() {
     pixel_scale_mm: 0.05,
     environment: "atmospheric",
     aggression: "normal",
-    threshold: 0.25,
+    threshold: 0.15,
   });
   const imgRef = useRef<HTMLImageElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);

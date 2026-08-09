@@ -187,17 +187,20 @@ def main():
     data_yaml = build_combined(data_paths) if len(data_paths) > 1 else data_paths[0]
 
     model = YOLO("yolov8s-seg.pt")
+    # T4 16GB: batch 8 is usually fine for yolov8s-seg @ 640
+    batch = int(os.environ.get("BATCH_SIZE", "8"))
     results = model.train(
         data=str(data_yaml),
-        epochs=50,
-        imgsz=640,
-        batch=4,
+        epochs=int(os.environ.get("EPOCHS", "50")),
+        imgsz=int(os.environ.get("IMGSZ", "640")),
+        batch=batch,
         project=str(RUNS),
         name="train",
         exist_ok=True,
-        patience=15,
+        patience=int(os.environ.get("PATIENCE", "15")),
         save=True,
         device=0,
+        cache=True,
     )
 
     best = RUNS / "train" / "weights" / "best.pt"

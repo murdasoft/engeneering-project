@@ -28,7 +28,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [threshold, setThreshold] = useState(0.25);
+  const [threshold, setThreshold] = useState(0.15);
   const [notifications, setNotifications] = useState({
     emailCompleted: true,
     criticalAlerts: true,

@@ -16,7 +16,7 @@ from huggingface_hub import hf_hub_download, login as hf_login
 app = FastAPI(
     title="InspectAI ML Service",
     description="YOLOv8-based concrete defect detection API with engineering analysis",
-    version="5.0.0",
+    version="4.1.0",
 )
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
@@ -34,10 +34,12 @@ HF_MODEL_FALLBACK = os.getenv("HF_MODEL_FALLBACK", "wjdqlscho/Crack_YOLO_Segment
 HF_MODEL_FALLBACK_FILE = os.getenv("HF_MODEL_FALLBACK_FILE", "best.pt")
 HF_MODEL_SECONDARY = os.getenv("HF_MODEL_SECONDARY", "keremberke/yolov8s-surface-crack-detection")
 HF_MODEL_SECONDARY_FILE = os.getenv("HF_MODEL_SECONDARY_FILE", "best.pt")
-CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.20"))
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.15"))
 MIN_CRACK_AREA = 120          # allow thin, elongated small cracks
 MIN_CRACK_MAX_DIM = 30        # but still require meaningful length
 SMALL_CRACK_AREA_CUTOFF = 1500  # below this, NMS is more permissive
+MODEL_VERSION = "ensemble-v4.1"
+SERVICE_VERSION = "4.1.0"
 
 # Non-crack object classes that cause false positives
 NON_CRACK_OBJECTS = {
@@ -57,8 +59,13 @@ if HF_TOKEN:
 API_KEY = os.getenv("ML_API_KEY", "")
 
 
-async def verify_api_key(x_api_key: Optional[str] = Header(None)):
-    return True
+async def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")):
+    """Require X-API-Key when ML_API_KEY is configured; open access if unset."""
+    if not API_KEY:
+        return True
+    if x_api_key and x_api_key == API_KEY:
+        return True
+    raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 _models = {}
@@ -290,6 +297,36 @@ def _box_area_ratio(box: list, img_array: np.ndarray) -> float:
     image_h, image_w = img_array.shape[:2]
     image_area = image_w * image_h
     return _box_area(box) / image_area if image_area > 0 else 1.0
+
+
+def _box_aspect(box: list) -> float:
+    """min/max dimension ratio; 1.0 = square, lower = more elongated."""
+    w = max(0.0, box[2] - box[0])
+    h = max(0.0, box[3] - box[1])
+    if w <= 0 or h <= 0:
+        return 1.0
+    return min(w, h) / max(w, h)
+
+
+def _adjust_confidence(conf: float, cv_score: float) -> float:
+    """Rescale YOLO/CV confidence using CV validation (can boost above raw conf)."""
+    return min(1.0, float(conf) * (0.95 + 0.25 * float(cv_score)))
+
+
+def _is_blob_fp(box: list, img_array: np.ndarray, conf: float) -> bool:
+    """Reject large, thick, low-confidence boxes typical of plaster texture FPs."""
+    if conf >= 0.35:
+        return False
+    if _box_area_ratio(box, img_array) <= 0.08:
+        return False
+    return _box_aspect(box) > 0.55
+
+
+def _agrees_with_primary(box: list, primary_detections: list, iou_thresh: float = 0.2) -> bool:
+    for p_box, _, _, _ in primary_detections:
+        if compute_iou(box, p_box) >= iou_thresh:
+            return True
+    return False
 
 
 def _is_full_width_top_region(box: list, img_array: np.ndarray) -> bool:
@@ -571,8 +608,10 @@ def _cv_dense_crack_candidates(img_array: np.ndarray) -> list:
         if not is_valid:
             continue
 
-        # Base confidence for CV detections is modest; boost by validation score
-        adjusted_conf = 0.35 * (0.7 + cv_score * 0.3)
+        # Base confidence for CV detections; rescale with CV score (can boost)
+        adjusted_conf = _adjust_confidence(0.35, cv_score)
+        if _is_blob_fp(box, img_array, adjusted_conf):
+            continue
         candidates.append((box, adjusted_conf, "crack", None))
     return candidates
 
@@ -595,7 +634,7 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
     # Use a higher resolution for high-res images so small cracks are preserved
     imgsz = _select_imgsz(img_array)
     # Allow secondary/fallback to consider weaker small-crack candidates
-    small_crack_threshold = max(0.15, threshold - 0.10)
+    small_crack_threshold = max(0.10, threshold - 0.05)
 
     # Detect non-crack objects first (pipes, doors, outlets, etc.)
     non_crack_objects = _detect_non_crack_objects(img_array)
@@ -642,8 +681,9 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                 if not is_valid:
                     continue
 
-                # Boost confidence based on CV score
-                adjusted_conf = conf * (0.7 + cv_score * 0.3)
+                adjusted_conf = _adjust_confidence(conf, cv_score)
+                if _is_blob_fp(box, img_array, adjusted_conf):
+                    continue
                 primary_detections.append((box, adjusted_conf, cls_name, mask))
         except Exception:
             pass
@@ -676,7 +716,15 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                 if not is_valid:
                     continue
 
-                adjusted_conf = conf * (0.7 + cv_score * 0.3)
+                # Low-conf secondary: require primary agreement or strong CV score
+                if conf < threshold and not (
+                    _agrees_with_primary(box, primary_detections) or cv_score >= 0.35
+                ):
+                    continue
+
+                adjusted_conf = _adjust_confidence(conf, cv_score)
+                if _is_blob_fp(box, img_array, adjusted_conf):
+                    continue
                 secondary_detections.append((box, adjusted_conf, cls_name, None))
         except Exception:
             pass
@@ -711,11 +759,19 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                     if not is_valid:
                         continue
 
+                    # Low-conf fallback: require primary agreement or strong CV score
+                    if conf < threshold and not (
+                        _agrees_with_primary(box, primary_detections) or cv_score >= 0.35
+                    ):
+                        continue
+
                     polygon = _extract_crack_polygon(img_array, box)
                     if _box_area_ratio(box, img_array) > 0.90 and polygon is None:
                         continue
 
-                    adjusted_conf = conf * (0.7 + cv_score * 0.3)
+                    adjusted_conf = _adjust_confidence(conf, cv_score)
+                    if _is_blob_fp(box, img_array, adjusted_conf):
+                        continue
                     fallback_detections.append((box, adjusted_conf, cls_name, polygon))
             except Exception:
                 pass
@@ -1210,7 +1266,7 @@ class DetailedPredictionResponse(PredictionResponse):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "4.0.0", "models": [HF_MODEL, HF_MODEL_FALLBACK, HF_MODEL_SECONDARY]}
+    return {"status": "ok", "version": SERVICE_VERSION, "models": [HF_MODEL, HF_MODEL_FALLBACK, HF_MODEL_SECONDARY]}
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -1272,7 +1328,7 @@ async def predict(
         detections=detections,
         annotated_image=annotated_b64,
         processing_time=processing_time,
-        model_version="ensemble-v4.0",
+        model_version=MODEL_VERSION,
     )
 
 
@@ -1386,7 +1442,7 @@ async def predict_detailed(
         detections=detections,
         annotated_image=annotated_b64,
         processing_time=processing_time,
-        model_version="ensemble-v4.0",
+        model_version=MODEL_VERSION,
         detections_detailed=detections_detailed,
         summary=summary,
     )

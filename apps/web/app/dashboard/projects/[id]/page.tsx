@@ -60,7 +60,7 @@ export default function ProjectDetailPage() {
     rebar_class: "",
     structure_age: "",
     protective_layer_mm: "",
-    threshold: 0.25,
+    threshold: 0.15,
   });
 
   useEffect(() => {

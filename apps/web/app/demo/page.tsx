@@ -51,7 +51,7 @@ export default function DemoPage() {
   const [showBoxes, setShowBoxes] = useState(true);
   const [scale, setScale] = useState(1);
   const [pixelScale, setPixelScale] = useState(0.05);
-  const [threshold, setThreshold] = useState(0.25);
+  const [threshold, setThreshold] = useState(0.15);
   const fileRef = useRef<HTMLInputElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
