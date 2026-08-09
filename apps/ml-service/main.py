@@ -1150,40 +1150,42 @@ def get_defect_info(class_name: str) -> dict:
 
 
 def estimate_crack_width_mm(bbox: dict, image_w: int, image_h: int, pixel_scale_mm: Optional[float] = None) -> float:
-    """Estimate crack width in mm based on bbox and pixel scale."""
+    """Estimate crack *opening* width in mm (not the full detection bbox).
+
+    The YOLO bbox surrounds the crack path; opening is a thin dark line inside it.
+    Without calibrated pixel_scale_mm this is only a rough heuristic.
+    """
+    box_w = float(bbox.get("width", 0) or 0)
+    box_h = float(bbox.get("height", 0) or 0)
+    if box_w <= 0 or box_h <= 0:
+        return 0.0
+    opening_px = max(1.0, min(box_w, box_h) * 0.035)
     if pixel_scale_mm and pixel_scale_mm > 0:
-        width_px = min(bbox.get("width", 0), bbox.get("height", 0))
-        return width_px * pixel_scale_mm
-    # Heuristic: assume average photo distance ~3m, sensor width ~6mm, focal ~4mm
-    # width_mm ≈ (bbox_width_px / image_width) * 1000 (rough estimate for ~3m distance)
+        return round(opening_px * float(pixel_scale_mm), 3)
     if image_w > 0:
-        min_dim_px = min(bbox.get("width", 0), bbox.get("height", 0))
-        return round(min_dim_px / image_w * 500, 2)
+        return round(opening_px / image_w * 500.0, 3)
     return 0.0
 
 
 def estimate_crack_length_mm(bbox: dict, image_w: int, image_h: int, pixel_scale_mm: Optional[float] = None) -> float:
-    """Estimate crack length in mm."""
+    """Estimate crack length in mm along the long axis of the detection bbox."""
+    box_w = float(bbox.get("width", 0) or 0)
+    box_h = float(bbox.get("height", 0) or 0)
+    max_dim_px = max(box_w, box_h)
+    if max_dim_px <= 0:
+        return 0.0
     if pixel_scale_mm and pixel_scale_mm > 0:
-        max_dim_px = max(bbox.get("width", 0), bbox.get("height", 0))
-        return max_dim_px * pixel_scale_mm
+        return round(max_dim_px * float(pixel_scale_mm), 2)
     if image_w > 0:
-        max_dim_px = max(bbox.get("width", 0), bbox.get("height", 0))
-        return round(max_dim_px / image_w * 500, 2)
+        return round(max_dim_px / image_w * 500.0, 2)
     return 0.0
 
 
 def estimate_area_cm2(bbox: dict, image_w: int, image_h: int, pixel_scale_mm: Optional[float] = None) -> float:
-    """Estimate defect area in cm²."""
-    if pixel_scale_mm and pixel_scale_mm > 0:
-        w_mm = bbox.get("width", 0) * pixel_scale_mm
-        h_mm = bbox.get("height", 0) * pixel_scale_mm
-        return round(w_mm * h_mm / 100, 2)
-    if image_w > 0:
-        w_mm = bbox.get("width", 0) / image_w * 500
-        h_mm = bbox.get("height", 0) / image_h * 500
-        return round(w_mm * h_mm / 100, 2)
-    return 0.0
+    """Estimate defect area in cm² using opening × length (not full bbox area)."""
+    width_mm = estimate_crack_width_mm(bbox, image_w, image_h, pixel_scale_mm)
+    length_mm = estimate_crack_length_mm(bbox, image_w, image_h, pixel_scale_mm)
+    return round((width_mm * length_mm) / 100.0, 2)
 
 
 def build_engineering_analysis(det: dict, image_w: int, image_h: int, pixel_scale_mm: Optional[float], environment: str) -> dict:
@@ -1201,7 +1203,7 @@ def build_engineering_analysis(det: dict, image_w: int, image_h: int, pixel_scal
     env_key = environment if environment in info["limits"] else "normal"
     limit_text = info["limits"].get(env_key, info["limits"]["normal"])
 
-    is_critical = width_mm > 0.3 if cls.lower() in ("crack",) else sev == "high"
+    is_critical = width_mm > 0.3 if (cls.lower() in ("crack",) and pixel_scale_mm) else sev == "high"
 
     confidence_level = "высоко" if conf > 0.75 else "умеренно" if conf > 0.45 else "слабо"
     why_text = info["why_nn_detected"].format(conf=int(conf * 100), confidence_level=confidence_level)
@@ -1220,6 +1222,7 @@ def build_engineering_analysis(det: dict, image_w: int, image_h: int, pixel_scal
             "estimated_area_cm2": area_cm2,
             "width_cm": round(width_mm / 10, 2),
             "length_cm": round(length_mm / 10, 2),
+            "scale_calibrated": bool(pixel_scale_mm and pixel_scale_mm > 0),
             "normative_limit": limit_text,
             "is_critical": is_critical,
             "why_nn_detected": why_text,
