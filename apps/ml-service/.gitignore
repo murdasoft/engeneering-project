@@ -1,2 +1,11 @@
 models/
 fonts/
+datasets/
+runs/
+eval_results.json
+*.bak*
+test_crack_ui.png
+test_result_*.jpg
+yolov8n.pt
+yolov8s-seg.pt
+yolov8n-seg.pt
