@@ -16,7 +16,7 @@ from huggingface_hub import hf_hub_download, login as hf_login
 app = FastAPI(
     title="InspectAI ML Service",
     description="YOLOv8-based concrete defect detection API with engineering analysis",
-    version="4.1.0",
+    version="4.1.1",
 )
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
@@ -38,8 +38,8 @@ CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.15"))
 MIN_CRACK_AREA = 120          # allow thin, elongated small cracks
 MIN_CRACK_MAX_DIM = 30        # but still require meaningful length
 SMALL_CRACK_AREA_CUTOFF = 1500  # below this, NMS is more permissive
-MODEL_VERSION = "ensemble-v4.1"
-SERVICE_VERSION = "4.1.0"
+MODEL_VERSION = "ensemble-v4.1.1"
+SERVICE_VERSION = "4.1.1"
 
 # Non-crack object classes that cause false positives
 NON_CRACK_OBJECTS = {
@@ -676,9 +676,11 @@ def run_ensemble(img_array: np.ndarray, threshold: float = CONFIDENCE_THRESHOLD)
                 if overlaps_non_crack:
                     continue
 
-                # CV validation — verify crack-like visual features
+                # CV validation — verify crack-like visual features.
+                # Strong primary YOLO can override a borderline CV miss
+                # (large true cracks often score just under the CV bar).
                 is_valid, cv_score = _validate_crack_region(img_array, box)
-                if not is_valid:
+                if not is_valid and not (conf >= 0.50 and cv_score >= 0.08):
                     continue
 
                 adjusted_conf = _adjust_confidence(conf, cv_score)
